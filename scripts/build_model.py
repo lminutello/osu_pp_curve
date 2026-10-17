@@ -217,6 +217,7 @@ def main():
 
     model = {
         "built": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "builtAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),   # exact time; the page shows it in the viewer's time zone
         "sources": sources,
         "n": int(len(H)),
         "fwd": [round(float(v), 7) for v in fwd],

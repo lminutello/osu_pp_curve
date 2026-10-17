@@ -815,17 +815,19 @@ state.you = [54, 2156];
 (() => {   // header status: dates come from the data file, so this updates itself on every refresh
   const nice = d => { const t = new Date(d.replace(/_/g, "-") + "T12:00:00Z"); return isNaN(t) ? d : t.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
   const dumps = (M.sources || []).filter(x => /^\d{4}_\d{2}_\d{2}$/.test(x)).sort();
-  const age = (Date.now() - new Date(M.built + "T12:00:00Z")) / 864e5;
+  const builtAt = new Date(M.builtAt || (M.built + "T12:00:00Z"));
+  const builtLocal = builtAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const age = (Date.now() - builtAt) / 864e5;
   const st = document.getElementById("status");
   st.innerHTML = `<span class="dot" style="${age > 45 ? "background:var(--gold);box-shadow:0 0 8px var(--gold)" : ""}"></span>
-    <span>Data updated <b class="${age > 45 ? "old" : ""}">${nice(M.built)}</b></span>
+    <span>Data updated <b class="${age > 45 ? "old" : ""}">${builtLocal}</b></span>
     <span>${fmt(M.n)} players${dumps.length ? ` · newest dump <b>${nice(dumps[dumps.length - 1])}</b>` : ""}</span>
     <span>${HIST.players ? `${fmt(HIST.players)} player histories` : "no player histories yet"}</span>`;
   st.title = dumps.length ? `Built from the data.ppy.sh dumps of ${dumps.map(nice).join(", ")}` : "";
 })();
 (() => {
   const fill = (k, v) => document.querySelectorAll(`[data-f="${k}"]`).forEach(e => e.textContent = v);
-  fill("n", fmt(M.n)); fill("thin", fmt(Math.round(M.thin / 10) * 10)); fill("built", M.built);
+  fill("n", fmt(M.n)); fill("thin", fmt(Math.round(M.thin / 10) * 10)); fill("built", new Date(M.builtAt || (M.built + "T12:00:00Z")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
   fill("sources", M.sources && M.sources[0] && /^\d{4}_/.test(M.sources[0]) ? ` (${M.sources.map(s => s.replace(/_/g, "-")).join(", ")})` : "");
   fill("ranksrc", M.rank.source || "real players' ranks");
   if (HIST.players) fill("hist", fmt(HIST.players));
