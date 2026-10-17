@@ -1,0 +1,56 @@
+name: Pull more player histories (manual)
+
+# Adds players' progression data from the osu! API to data/history.jsonl.gz, then refits everything.
+# Manual only, on purpose: the API asks people not to harvest data on a schedule.
+# Needs two repository secrets (Settings > Secrets and variables > Actions):
+#   OSU_CLIENT_ID      your OAuth app's client ID
+#   OSU_CLIENT_SECRET  your OAuth app's client secret
+on:
+  workflow_dispatch:
+    inputs:
+      plan:
+        description: "Play-time groups as min:max:count (hours), space separated"
+        default: "600:1e9:200 150:600:200 30:150:200 1:30:100"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install numpy
+        run: pip install "numpy>=1.26,<3"
+
+      - name: Build the sample to pick players from
+        run: python scripts/build_model.py --write-users .cache/users.csv
+
+      - name: Pull histories from the osu! API (about 2 seconds per player)
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+          PLAN: ${{ github.event.inputs.plan }}    # passed through env, never pasted into the shell command
+        run: python scripts/pull_histories.py --users .cache/users.csv --plan $PLAN
+
+      - name: Refit and rebuild
+        run: |
+          python scripts/fit_histories.py
+          python scripts/build_model.py --users-csv .cache/users.csv
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.jsonl.gz data/history_fit.json data/model.json
+          if git diff --cached --quiet; then echo "No changes."; else git commit -m "Add player histories ($(date -u +%Y-%m-%d))" && git push; fi

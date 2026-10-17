@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>osu! Playtime Curve</title>
+<meta name="description" content="How does your osu! pp compare to other players with the same play time? Percentile, rank, star level and a projection, from thousands of real players.">
+<meta property="og:title" content="osu! Playtime Curve">
+<meta property="og:description" content="Your osu! pp vs everyone with the same play time: percentile, rank, star level and where you're headed.">
+<meta name="theme-color" content="#1b1619">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='24' fill='%23ff66aa' stroke='white' stroke-width='6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,500;0,600;0,700;0,800;0,900;1,900&display=swap">
+<style>
+/* Layout: triangle-band header, then chart (wide) beside a ranking-screen result card; one column on phones.
+   Single dark theme on purpose: the game's site and client are dark, plum-tinted, with pink as the one loud color
+   and sky blue as its partner. Everything else stays quiet so the pink marker and the big percent carry the page. */
+:root {
+  --bg: #1b1619; --bg-2: #231c20; --surface: #2a2226; --surface-2: #382e32; --line: #46393f;
+  --fg: #ffffff; --fg-2: #e8dfe3; --muted: #a8999f;
+  --pink: #ff66aa; --pink-hi: #ff8fc2; --pink-ink: #2a0f1d;
+  --blue: #66ccff; --gold: #ffcc22; --proj: #ff3b47; --green: #b3d944; --purple: #c27aff; --red: #ff5a6e;
+  --dot: rgba(102,204,255,.10); --band1: rgba(102,204,255,.22); --band2: rgba(102,204,255,.08);
+  --thin: rgba(255,204,34,.05);
+  --f: "Nunito", "Varela Round", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+img { max-width: 100%; }
+footer a { color: var(--pink-hi); text-decoration: none; font-weight: 800; }
+footer a:hover { text-decoration: underline; }
+footer .credits { color: var(--fg-2); padding-top: 10px; border-top: 1px solid var(--line); }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--f); font-size: 15px; line-height: 1.5; font-weight: 600;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(40px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 18px; }
+
+/* header band with drifting triangles, like the client's backgrounds */
+.hero { position: relative; overflow: hidden; border-radius: 20px; background: linear-gradient(115deg, #3a1f2e 0%, #2a1d33 55%, #1d2340 100%);
+  border: 1px solid var(--line); }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hero-inner { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; padding: 30px 26px 0; }
+.brand { display: flex; align-items: center; gap: 24px; min-width: 0; padding-left: 14px; margin-block: 8px 22px; }
+@media (max-width: 560px) { .brand { gap: 16px; padding-left: 4px; } .circle { width: 42px; height: 42px; font-size: 19px; border-width: 3px; } }
+.circle { flex: none; width: 54px; height: 54px; border-radius: 50%; background: var(--pink); border: 4px solid #fff;
+  box-shadow: 0 0 0 5px rgba(255,102,170,.25), 0 8px 24px -6px var(--pink); position: relative; display: grid; place-items: center;
+  font: 900 24px/1 var(--f); color: #fff; }
+.circle::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 3px solid var(--pink); opacity: 0;
+  animation: approach 2.4s ease-in infinite; }
+@keyframes approach { 0% { transform: scale(1.55); opacity: 0; } 15% { opacity: .9; } 70% { transform: scale(.86); opacity: .9; } 72%, 100% { opacity: 0; transform: scale(.86); } }
+h1 { margin: 0; font: 900 clamp(26px, 4.4vw, 40px)/1.05 var(--f); letter-spacing: -.01em; text-wrap: balance; }
+h1 .o { color: var(--pink); }
+.sub { margin: 6px 0 0; color: var(--fg-2); font-weight: 600; font-size: 14px; max-width: 60ch; opacity: .85; }
+
+.tabs { display: flex; gap: 6px; align-self: end; margin-top: 6px; }
+.tab { font: 800 15px var(--f); color: var(--fg-2); background: none; border: 0; padding: 12px 18px 14px; cursor: pointer; position: relative; opacity: .7; }
+.tab::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 4px; border-radius: 4px 4px 0 0; background: transparent; }
+.tab[aria-selected="true"] { color: #fff; opacity: 1; }
+.tab[aria-selected="true"]::after { background: var(--pink); box-shadow: 0 0 12px var(--pink); }
+.tab:hover { opacity: 1; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; min-width: 0; }
+
+.chart-panel { padding: 14px 14px 18px; display: grid; gap: 14px; position: relative; }
+.chart-top { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; padding: 2px 6px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+.sw.line { height: 3px; background: #fff; }
+.sw.b1 { background: var(--band1); } .sw.b2 { background: var(--band2); border: 1px solid var(--band1); }
+.sw.you { width: 12px; height: 12px; border-radius: 50%; background: var(--pink); border: 2px solid #fff; }
+.sw.est { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); border: 2px solid #fff; }
+.axes-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 3px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font: 800 12.5px var(--f); }
+.axes-switch span { position: relative; z-index: 1; padding: 5px 14px; text-align: center; color: var(--muted); transition: color .2s; }
+.axes-switch .knob { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px;
+  background: var(--blue); box-shadow: 0 0 12px -2px var(--blue); transition: transform .25s cubic-bezier(.3,1.4,.5,1); }
+.axes-switch[aria-checked="true"] .knob { transform: translateX(100%); }
+.axes-switch[aria-checked="false"] .lin, .axes-switch[aria-checked="true"] .log { color: #10222e; }
+.axes-switch:hover { border-color: var(--blue); }
+.canvas-box { position: relative; width: 100%; aspect-ratio: 16 / 10; max-width: 100%; border-radius: 12px; overflow: hidden; background: var(--bg-2); }
+@media (max-width: 560px) { .canvas-box { aspect-ratio: 4 / 4.3; } }
+canvas { width: 100%; height: 100%; display: block; touch-action: pan-y; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 0 6px; }
+.field { display: grid; gap: 6px; }
+.field label, .eyebrow { font: 800 11px var(--f); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.field input { width: 104px; font: 900 22px var(--f); color: #fff; background: var(--bg-2);
+  border: 2px solid var(--line); border-radius: 14px; padding: 9px 12px; text-align: center; font-variant-numeric: tabular-nums;
+  transition: border-color .15s, box-shadow .15s; }
+.field input:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 4px rgba(255,102,170,.18); }
+.field input.pp { width: 136px; }
+.field input.bad, .field input.bad:focus { border-color: var(--red); box-shadow: 0 0 0 4px rgba(255,90,110,.2); animation: shake .28s; }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.hint { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin: 0; font-weight: 600; }
+
+.slider-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 0 6px; }
+input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
+.slider-val { font: 900 26px var(--f); color: var(--gold); font-variant-numeric: tabular-nums; min-width: 6ch; text-align: right; line-height: 1.1; }
+.slider-val small { display: block; font-size: 13px; color: var(--muted); font-weight: 800; }
+
+/* add-on toggles and their boxes: red = your projection, gold = the trend. --c carries the color */
+.field input.rank { width: 150px; }
+.field input.rank::placeholder { color: var(--muted); font-size: 15px; font-weight: 800; }
+.field label small { text-transform: none; letter-spacing: 0; font-weight: 700; opacity: .8; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 0 6px; }
+.switch { --c: var(--proj); display: inline-flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px 0; cursor: pointer;
+  font: 800 13.5px var(--f); color: var(--fg-2); }
+.switch.gold { --c: var(--gold); }
+.switch .trk { width: 40px; height: 22px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); position: relative; transition: background .2s, border-color .2s; }
+.switch .trk::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted);
+  transition: transform .22s cubic-bezier(.3,1.4,.5,1), background .2s; }
+.switch[aria-checked="true"] { color: #fff; }
+.switch[aria-checked="true"] .trk { background: color-mix(in srgb, var(--c) 25%, transparent); border-color: var(--c); }
+.switch[aria-checked="true"] .trk::after { transform: translateX(18px); background: var(--c); }
+.switch b { color: var(--c); }
+.box { --c: var(--proj); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 12px 14px;
+  margin: 0 6px; border-radius: 14px; background: color-mix(in srgb, var(--c) 7%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
+.box.gold { --c: var(--gold); }
+.box input[type=range] { accent-color: var(--c); }
+.box-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; align-items: center; }
+.box-title { font: 800 10.5px var(--f); letter-spacing: .12em; text-transform: uppercase; color: var(--c); grid-column: 1 / -1; margin-bottom: -4px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.reset { font: 800 11.5px var(--f); letter-spacing: 0; text-transform: none; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+.reset:hover { background: color-mix(in srgb, var(--c) 24%, transparent); color: #fff; }
+.box-pp { font: 900 30px/1 var(--f); color: var(--c); font-variant-numeric: tabular-nums; }
+.box-pp small { font-size: .55em; }
+.box-rank { text-align: right; display: grid; gap: 1px; }
+.box-rank strong { font: 900 20px/1.1 var(--f); color: #fff; font-variant-numeric: tabular-nums; }
+.box-rank span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.box-meta { grid-column: 1 / -1; color: var(--fg-2); font-size: 13px; font-weight: 700; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.box-meta i { font-style: normal; color: var(--muted); }
+.box-val { font: 900 18px/1.1 var(--f); color: #fff; text-align: right; font-variant-numeric: tabular-nums; min-width: 7ch; }
+.box-val small { display: block; font-size: 12px; color: var(--muted); font-weight: 800; }
+.box .hint { grid-column: 1 / -1; }
+.sw.proj { width: 14px; height: 3px; background: var(--proj); }
+/* star pill, colored along the game's difficulty spectrum */
+.star { display: inline-flex; align-items: center; gap: 3px; padding: 1px 9px 1px 8px; border-radius: 999px; background: var(--sc);
+  color: var(--st); font: 900 14px/1.5 var(--f); font-variant-numeric: tabular-nums; vertical-align: middle; white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 12px -6px var(--sc); }
+.star.big { font-size: 20px; padding: 2px 12px 2px 10px; }
+.box-rank strong { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.sw.projdot { width: 10px; height: 10px; background: #fff; border: 2px solid var(--proj); transform: rotate(45deg); border-radius: 2px; }
+
+.toast { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); background: var(--red); color: #fff;
+  font-weight: 800; font-size: 14px; padding: 10px 16px 10px 12px; border-radius: 14px; box-shadow: 0 12px 32px -10px var(--red);
+  max-width: calc(100% - 32px); z-index: 5; display: flex; align-items: center; gap: 10px; animation: toast-in .22s ease-out; }
+.toast-x { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; font: 900 12px/1 var(--f); }
+.toast-msg { display: grid; gap: 1px; } .toast-msg small { font-weight: 600; opacity: .92; font-size: 12.5px; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* result card: reads like the ranking screen. one huge number + grade, quiet tiles underneath */
+.card { padding: 22px; display: grid; gap: 16px; overflow: hidden; position: relative; }
+.score { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 14px; }
+.headline { font: 900 clamp(52px, 7vw, 68px)/.95 var(--f); color: var(--pink); font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  text-shadow: 0 0 28px rgba(255,102,170,.35); }
+.headline small { font-size: .5em; letter-spacing: 0; }
+.headline.est { color: var(--gold); text-shadow: 0 0 28px rgba(255,204,34,.3); }
+.headline-sub { color: var(--fg-2); font-size: 14px; font-weight: 600; grid-column: 1 / -1; }
+.headline-sub b { color: #fff; }
+/* grade pills, styled like the badges on an osu! profile */
+.grade { display: grid; justify-items: center; gap: 6px; }
+.pill { --h: 58px; height: var(--h); min-width: calc(var(--h) * 1.75); padding: 0 14px; border-radius: 999px; display: grid; place-items: center;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--g) 82%, #fff) 0%, var(--g) 55%, color-mix(in srgb, var(--g) 80%, #000) 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.35), inset 0 -3px 0 rgba(0,0,0,.18), 0 6px 18px -6px var(--g);
+  font: 900 calc(var(--h) * .66)/1 var(--f); color: var(--t, #fff); letter-spacing: -.02em; text-shadow: 0 2px 0 rgba(0,0,0,.2); }
+.pill.sm { --h: 20px; min-width: 34px; padding: 0 7px; font-size: 12.5px; box-shadow: inset 0 1px 0 rgba(255,255,255,.3); text-shadow: none; }
+.grade-cap { font: 800 10.5px var(--f); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.tile { background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 11px 12px; display: grid; gap: 2px; min-width: 0; align-content: start; }
+.tile dt { font: 800 10.5px var(--f); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tile dd { margin: 0; font: 900 22px/1.2 var(--f); font-variant-numeric: tabular-nums; color: #fff; }
+.tile dd.pink { color: var(--pink-hi); } .tile dd.blue { color: var(--blue); } .tile dd.gold { color: var(--gold); }
+.tile .note { color: var(--muted); font-size: 11.5px; font-weight: 600; line-height: 1.35; }
+.loading { margin: 0; color: var(--muted); font-weight: 800; font-size: 15px; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .loading { animation: none; } }
+.warn { color: var(--gold); font-size: 12.5px; margin: 0; font-weight: 700; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); font-weight: 700; padding-top: 12px; border-top: 1px solid var(--line); }
+.key span { display: inline-flex; align-items: center; gap: 5px; }
+.key span.cur { color: #fff; }
+
+footer { color: var(--muted); font-size: 12.5px; max-width: 82ch; display: grid; gap: 6px; font-weight: 600; }
+footer p { margin: 0; }
+footer .lead { color: var(--fg-2); font-size: 14px; font-weight: 700; }
+canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .circle::after, .toast, .field input.bad { animation: none; } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="hero">
+    <canvas id="tri" aria-hidden="true"></canvas>
+    <div class="hero-inner">
+      <div class="brand">
+        <div class="circle" aria-hidden="true"></div>
+        <div><h1><span class="o">osu!</span> pp vs hours played</h1></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel chart-panel">
+      <div class="chart-top">
+        <div class="legend">
+          <span><i class="sw line"></i>median player</span>
+          <span><i class="sw b1"></i>middle 68%</span>
+          <span><i class="sw b2"></i>middle 95%</span>
+          <span><i class="sw you"></i>you</span>
+          <span id="lg-proj" hidden><i class="sw proj"></i>your projection <i class="sw projdot"></i></span>
+          <span id="lg-est" hidden><i class="sw est"></i>trend point</span>
+        </div>
+        <button class="axes-switch" id="axes-btn" type="button" role="switch" aria-checked="true" aria-label="Log axes"><i class="knob" aria-hidden="true"></i><span class="lin">Linear</span><span class="log">Log</span></button>
+      </div>
+      <div class="toast" id="toast" role="alert" hidden></div>
+      <div class="canvas-box"><canvas id="chart" aria-label="Scatter of pp against hours played with median curve and bands"></canvas></div>
+
+      <form class="controls" id="compare-form" autocomplete="off" novalidate>
+        <div class="field"><label for="in-days">Days</label><input id="in-days" inputmode="decimal" value="2"></div>
+        <div class="field"><label for="in-hours">Hours</label><input id="in-hours" inputmode="decimal" value="6"></div>
+        <div class="field"><label for="in-pp">pp</label><input id="in-pp" class="pp" inputmode="decimal" value="2156"></div>
+        <div class="field"><label for="in-rank">Global rank <small>(optional)</small></label><input id="in-rank" class="rank" inputmode="numeric" placeholder="optional"></div>
+        <p class="hint">Copy these from your profile (hours 0–24, minutes don't matter), or drag your dot on the chart. Adding your global rank makes every rank estimate on the page more accurate. Example shown: sakul333.</p>
+      </form>
+
+      <div class="toggles">
+        <button class="switch" id="proj-btn" type="button" role="switch" aria-checked="false"><i class="trk" aria-hidden="true"></i><span>Project my <b>future</b></span></button>
+        <button class="switch gold" id="trend-btn" type="button" role="switch" aria-checked="false"><i class="trk" aria-hidden="true"></i><span>Explore the <b>trend</b></span></button>
+      </div>
+
+      <div class="box" id="proj-row" hidden>
+        <div class="box-title"><span>Your projection</span><button class="reset" id="proj-reset" type="button">↺ Back to your stats</button></div>
+        <div class="box-head">
+          <div class="box-pp" id="proj-pp"></div>
+          <div class="box-rank"><strong id="proj-rank"></strong><span id="proj-rank-note"></span></div>
+        </div>
+        <div class="box-meta" id="proj-meta"></div>
+        <input type="range" id="proj-slider" min="0" max="1000" step="1" value="726" aria-label="Extra hours of play from now">
+        <div class="box-val" id="proj-val"></div>
+        <p class="hint">From <span data-f="hist">thousands of</span> real players' histories: players ahead of the trend drift back toward it as they play, and players behind it catch up. That direction held up in every check; the exact speed didn't, so the red line uses a middle value and the shaded red is wide on purpose. It covers both the uncertain speed and how much real players starting where you are spread out. Faint dotted line: if you kept your exact percentile forever.</p>
+      </div>
+
+      <div class="box gold" id="trend-row" hidden>
+        <div class="box-title"><span>The trend · median player</span><button class="reset" id="trend-reset" type="button">↺ Back to your hours</button></div>
+        <div class="box-head">
+          <div class="box-pp" id="trend-pp"></div>
+          <div class="box-rank"><strong id="trend-rank"></strong><span id="trend-rank-note"></span></div>
+        </div>
+        <div class="box-meta" id="trend-meta"></div>
+        <input type="range" id="trend-slider" min="0" max="1000" step="1" value="0" aria-label="Hours played for the trend point">
+        <div class="box-val" id="trend-val"></div>
+        <p class="hint">Yellow dot: the median player at that play time, with the middle 68% of players as the yellow bar. "Real players gained" is how fast players near the median actually improved at this stage, from <span data-f="hist">thousands of</span> tracked histories. It runs above the curve's slope past ~40 hours, because the snapshot curve also counts people who stopped playing.</p>
+      </div>
+    </section>
+
+    <aside class="panel card" id="card" aria-live="polite"><div class="eyebrow">Loading</div><p class="loading">Loading players…</p></aside>
+  </div>
+
+  <footer>
+    <p class="lead">Where you stand against <span data-f="n">thousands of</span> randomly sampled ranked osu!standard players from the official osu! data dumps<span data-f="sources"></span>.</p>
+    <p>Curve: ln(pp) fitted as a quadratic in ln(hours), so the growth exponent shrinks as play time goes up. σ is the spread of ln(pp) among players at that play time, measured locally. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
+    <p>Ranks: the sample gives the share of ranked players above any pp; the leaderboard size and a correction for high pp come from <span data-f="ranksrc">real players' ranks</span>. Entering your own rank fine-tunes it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
+    <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out.</p>
+    <p>Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
+    <p>Data: data.ppy.sh random_10000 dumps and the osu! API; players with under 1 hour logged are excluded from the curve. Hours = total_seconds_played. Past about <span data-f="thin">1,000</span> hours only 2% of players remain, so read that region loosely. The model rebuilds itself monthly; this version was built <span data-f="built">recently</span>.</p>
+    <p class="credits">Made by Lukas Minutello · <a href="https://github.com/lminutello/osu_pp_curve">How it works (GitHub)</a> · Not affiliated with osu! or ppy Pty Ltd.</p>
+  </footer>
+</div>
+
+
+<script>
+fetch("data/model.json", { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(M => {
+const PARAMS = M, PTS = M.pts, ALLPP = M.allpp, HIST = M.history || {};
+const P = PARAMS, N = PTS.length;
+const lnH = new Float64Array(N), lnP = new Float64Array(N), Hs = new Float64Array(N), PPs = new Float64Array(N);
+PTS.forEach(([h, p], i) => { Hs[i] = h; PPs[i] = p; lnH[i] = Math.log(h); lnP[i] = Math.log(p); });
+
+// ---------- model (same coefficients as the Python tool)
+const poly = (b, x) => b[0] + b[1] * x + b[2] * x * x;
+const interp = (t, x) => { if (x <= t[0][0]) return t[0][1]; for (let i = 1; i < t.length; i++) if (x <= t[i][0]) {
+  const [x0, y0] = t[i - 1], [x1, y1] = t[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return t[t.length - 1][1]; };
+const medPP = H => Math.exp(poly(P.fwd, Math.log(H)));
+const sdAt = H => interp(P.fwdSd, Math.log(H));
+const band = (H, z) => Math.exp(poly(P.fwd, Math.log(H)) + z * sdAt(H));
+const expo = H => P.fwd[1] + 2 * P.fwd[2] * Math.log(H);
+const ppPerHour = H => medPP(H) * expo(H) / H;
+const revMu = lp => poly(P.rev, lp), revSd = lp => interp(P.revSd, lp);
+
+// every player's position relative to the trend, standardized (Z: pp given hours; S: hours given pp)
+const Z = new Float64Array(N), S = new Float64Array(N);
+for (let i = 0; i < N; i++) {
+  Z[i] = (lnP[i] - poly(P.fwd, lnH[i])) / interp(P.fwdSd, lnH[i]);
+  S[i] = (lnH[i] - revMu(lnP[i])) / revSd(lnP[i]);
+}
+// smooth percentile: Gaussian weights on distance in log units, so nobody drops in or out of a hard window
+const BW = 0.25;
+function kernelPct(arr, center, hit) {
+  let sw = 0, sw2 = 0, sh = 0;
+  for (let i = 0; i < N; i++) { const d = (arr[i] - center) / BW; if (d > 4 || d < -4) continue;
+    const w = Math.exp(-0.5 * d * d); sw += w; sw2 += w * w; if (hit(i)) sh += w; }
+  return sw ? [100 * sh / sw, sw * sw / sw2] : [null, 0];
+}
+function compare(H, pp) {
+  const r = {}, x = Math.log(H), lp = Math.log(pp), mu = poly(P.fwd, x);
+  r.median = Math.exp(mu); r.z = (lp - mu) / sdAt(H); r.ratio = pp / r.median;
+  [r.pct, r.nH] = kernelPct(lnH, x, i => Z[i] < r.z);
+  const s = (x - revMu(lp)) / revSd(lp); r.medHours = Math.exp(revMu(lp));
+  [r.faster, r.nP] = kernelPct(lnP, lp, i => S[i] > s);
+  // too few real players nearby (far past the data): fall back to the fitted normal model
+  if (r.pct == null || r.nH < 20) { r.pct = 100 * cdf(r.z); r.nH = 0; }
+  if (r.faster == null || r.nP < 20) { r.faster = 100 * cdf(s); r.nP = 0; }
+  return r;
+}
+const erf = x => { const sg = Math.sign(x); x = Math.abs(x); const t = 1 / (1 + 0.3275911 * x);
+  return sg * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x)); };
+const cdf = z => 0.5 * (1 + erf(z / Math.SQRT2));
+const Z_MAX = 3.5;   // projections start from at most 3.5 sd off the trend: no tracked player was further out
+
+// ---------- ranks: share of all 10,000 sampled ranked players above a pp, times the leaderboard size
+const LALL = ALLPP.map(Math.log), NA = LALL.length;
+function fracAbove(pp) {
+  const l = Math.log(pp);
+  if (l >= LALL[NA - 1]) return { f: 0.5 / NA, top: true };
+  if (l <= LALL[0]) return { f: 1 - 0.5 / NA };
+  let a = 0, b = NA - 1; while (b - a > 1) { const m = (a + b) >> 1; LALL[m] <= l ? a = m : b = m; }
+  const pos = a + (LALL[b] > LALL[a] ? (l - LALL[a]) / (LALL[b] - LALL[a]) : 0);
+  return { f: 1 - (pos + 0.5) / NA };
+}
+// leaderboard size, calibrated on 400 real players' (pp, global rank) pairs from the osu! API, Oct 2026.
+// with it, predicted ranks land within ~4% of real ones in every pp bracket up to 6,000 pp
+const N_DEFAULT = M.rank.N;
+const sig3 = v => { if (v < 1000) return Math.round(v); const k = 10 ** (Math.floor(Math.log10(v)) - 2); return Math.round(v / k) * k; };
+// the 10k sample thins out at high pp, so its ranks read optimistic up there; this correction is the measured
+// gap against 1,782 real players (ln pp -> ln factor). With it, ranks land within ~2% of real up to 9,000 pp.
+const RANK_CORR = M.rank.corr && M.rank.corr.length >= 2 ? M.rank.corr : [[0, 0], [20, 0]];
+const rankCorr = pp => Math.exp(interp(RANK_CORR, Math.log(pp)));
+const shareAbove = pp => { const r = fracAbove(pp); return { f: r.f * rankCorr(pp), top: r.top }; };
+function rankOf(pp) {
+  const { f, top } = shareAbove(pp), n = state.Ncal ?? N_DEFAULT, r = Math.max(1, Math.round(n * f));
+  return { r, top, text: top ? `top ~#${fmt(sig3(r))}` : `~#${fmt(sig3(r))}` };
+}
+const rankNote = () => state.Ncal ? "tuned to the rank you entered" : "calibrated on real players' ranks";
+
+// ---------- star level (rough): total pp is ~15x your top play (0.95 weighting + bonus pp),
+// and a solid FC's pp grows about with stars cubed (~35pp at 3*, 80 at 4*, 160 at 5*, 280 at 6*)
+// fitted on 2,086 real players: median stars of each one's top 10 plays without rate/difficulty mods.
+// ln(stars) = 0.008273 ln(pp)^2 + 0.12691 ln(pp) + 0.11909; matches every pp bracket's median within ~0.1 star
+const SC = HIST.stars || { a: 0.11909, b: 0.12691, c: 0.008273 };
+const starOf = pp => { const x = Math.log(Math.max(pp, 1)); return Math.min(9.5, Math.max(0.5, Math.exp(SC.c * x * x + SC.b * x + SC.a))); };
+const SPEC = [[0.1, "#4290fb"], [1.25, "#4fc0ff"], [2, "#4fffd5"], [2.5, "#7cff4f"], [3.3, "#f6f05c"], [4.2, "#ff8068"],
+  [4.9, "#ff4e6f"], [5.8, "#c645b8"], [6.7, "#6563de"], [7.7, "#18158e"], [9, "#000000"]];
+function starColor(s) {
+  const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  if (s <= SPEC[0][0]) return SPEC[0][1]; if (s >= SPEC[SPEC.length - 1][0]) return SPEC[SPEC.length - 1][1];
+  const j = SPEC.findIndex(([v]) => v >= s), [a, ca] = SPEC[j - 1], [b, cb] = SPEC[j], t = (s - a) / (b - a);
+  const [x, y] = [hex(ca), hex(cb)]; return `rgb(${x.map((v, k) => Math.round(v + (y[k] - v) * t)).join(",")})`;
+}
+const starPill = (pp, big) => { const s = starOf(pp), c = starColor(s);
+  const [r, g, b] = c.startsWith("#") ? [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)) : c.match(/\d+/g).map(Number);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;   // dark text on light pills, white on mid, gold on the near-black top end like the game
+  const ink = lum > 0.62 ? "#1b1619" : s >= 6.5 ? "#ffd966" : "#ffffff";
+  return `<span class="star ${big ? "big" : ""}" style="--sc:${c};--st:${ink};text-shadow:${lum > 0.62 ? "none" : "0 1px 0 rgba(0,0,0,.35)"}">★ ${s >= 9.5 ? "9.5+" : fmt(s, 1)}</span>`; };
+
+// ---------- input parsing
+function num(raw, name, { blank = false, zero = true, max = Infinity } = {}) {
+  const trimmed = String(raw).trim();
+  if (name !== "pp" && /[\s,]/.test(trimmed)) throw [name, `${name}: "${trimmed}" has a space or comma in it`, "Enter one number, like 3 or 3.5"];
+  const t = name === "pp" ? trimmed.replace(/[\s,_]/g, "") : trimmed;
+  if (t === "") { if (blank) return 0; throw [name, `${name} is empty`]; }
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(t)) throw [name, `${name}: "${trimmed}" isn't a number`, "Use digits only, like 3 or 3.5"];
+  const v = parseFloat(t);
+  if (!zero && v === 0) throw [name, `${name} must be more than 0`];
+  if (v > max) throw [name, `${name} can't be more than ${fmt(max)}`, name === "Hours" ? "Put full days in the Days box" : ""];
+  return v;
+}
+function parseRank(raw) {
+  const trimmed = String(raw).trim();
+  if (trimmed === "") return null;
+  const t = trimmed.replace(/^#/, "").replace(/[\s,]/g, "");
+  if (!/^\d+$/.test(t)) throw ["Rank", `Rank: "${trimmed}" isn't a whole number`, "Use the Global Ranking from your profile, like 516483 or #516,483"];
+  const v = parseInt(t, 10);
+  if (v < 1) throw ["Rank", "Rank must be 1 or higher"];
+  if (v > 20000000) throw ["Rank", "Rank can't be more than 20,000,000"];
+  return v;
+}
+
+// ---------- state
+const $ = id => document.getElementById(id);
+const state = { log: true, you: null, estH: 100, proj: false, trend: false, projExtra: 150, rank: null, Ncal: null };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const dh = H => { const t = Math.round(H), d = Math.floor(t / 24), h = t % 24; return d ? `${fmt(d)}d ${h}h` : `${h}h`; };
+const H0 = Math.max(1, P.hMin), H1 = P.hMax;
+
+// ---------- chart
+const cv = $("chart"), ctx = cv.getContext("2d");
+let geo = null;
+function layout() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const narrow = r.width < 500;
+  const m = { l: narrow ? 44 : 58, r: 12, t: 10, b: 38 };
+  let xr, yr;
+  if (state.log) { xr = [H0 * 0.9, H1 * 1.1]; yr = [Math.max(1, band(H0, -2) * 0.7), band(H1, 2) * 1.3]; }
+  else { const cap = Math.min(H1, 2500); xr = [0, cap]; yr = [0, band(cap, 2) * 1.08]; }
+  const f = state.log ? Math.log10 : v => v;
+  const X = v => m.l + (f(Math.max(v, 1e-9)) - f(xr[0])) / (f(xr[1]) - f(xr[0])) * (r.width - m.l - m.r);
+  const Y = v => r.height - m.b - (f(Math.max(v, 1e-9)) - f(yr[0])) / (f(yr[1]) - f(yr[0])) * (r.height - m.t - m.b);
+  const Xinv = px => { const t = (px - m.l) / (r.width - m.l - m.r); const v = f(xr[0]) + t * (f(xr[1]) - f(xr[0])); return state.log ? 10 ** v : v; };
+  const Yinv = py => { const t = (r.height - m.b - py) / (r.height - m.t - m.b); const v = f(yr[0]) + t * (f(yr[1]) - f(yr[0])); return state.log ? 10 ** v : v; };
+  geo = { w: r.width, h: r.height, m, xr, yr, X, Y, Xinv, Yinv, narrow };
+}
+function ticks(lo, hi, log) {
+  if (log) { const out = []; for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) { const v = 10 ** e; if (v >= lo && v <= hi) out.push(v); } return out; }
+  const span = hi - lo, step0 = 10 ** Math.floor(Math.log10(span / 5)); const step = [1, 2, 2.5, 5, 10].map(k => k * step0).find(s => span / s <= 6);
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v); return out;
+}
+const tickLabel = v => v >= 1000 ? (v % 1000 === 0 ? `${v / 1000}k` : `${fmt(v / 1000, 1)}k`) : fmt(v);
+let pulse = 0, dotLayer = null, dotKey = "";
+const DOTS = M.scatter || Array.from({ length: N }, (_, i) => i);
+
+// projection: keep = same percentile at every future play time (spread narrows with hours, so this converges to the trend)
+// range: same multiple of the median (one side) to "add pp at the median player's absolute rate" (other side)
+// drift, measured from 2,183 real player histories (osu! API, Oct 2026): a player's z (std devs from the trend)
+// fades as they play: z_later = z_now * (H / H_later)^KAPPA. The direction held in every version of the analysis;
+// the exact rate didn't (0.1 to 0.6 depending on how past pp is rebuilt from today's top 100), so KAPPA = 0.30 is
+// the central value and the range below spans KAPPA 0.1-0.6 plus the real spread of outcomes (SPREAD per ln-hour).
+const DR = HIST.drift || { kappa: 0.3, lo: 0.1, hi: 0.6, spread: 0.45 };
+const KAPPA = DR.kappa, KAPPA_LO = DR.lo, KAPPA_HI = DR.hi, SPREAD = DR.spread;
+const zNow = (H, pp) => (Math.log(pp) - poly(P.fwd, Math.log(H))) / sdAt(H);
+const ppAtZ = (Hf, z) => Math.exp(poly(P.fwd, Math.log(Hf)) + z * sdAt(Hf));
+function projAt(H, pp, Hf) {
+  const z0 = Math.max(-Z_MAX, Math.min(Z_MAX, zNow(H, pp))), d = Math.max(0, Math.log(Hf / H));
+  const z = z0 * Math.exp(-KAPPA * d);
+  const kHalf = Math.abs(z0) * (Math.exp(-KAPPA_LO * d) - Math.exp(-KAPPA_HI * d)) / 2;
+  const sd = Math.sqrt(SPREAD * d + kHalf * kHalf);
+  return [ppAtZ(Hf, z), ppAtZ(Hf, z - sd), ppAtZ(Hf, z + sd)];
+}
+const projKeep = (H, pp, Hf) => ppAtZ(Hf, zNow(H, pp));   // old assumption: keep your percentile forever
+// projection slider = extra hours from now, same scale for everyone: 0 to +1,000 h (about 42 days of play time),
+// log-style so the first few dozen hours get fine control. Capped at the edge of the data.
+const PROJ_EXTRA_MAX = 1000, PROJ_LN = Math.log1p(PROJ_EXTRA_MAX);
+const extraFromSlider = v => Math.expm1(v / 1000 * PROJ_LN);
+const sliderFromExtra = x => Math.round(Math.log1p(x) / PROJ_LN * 1000);
+const projMax = H => Math.max(H, Math.min(H1, H + PROJ_EXTRA_MAX));
+const projTarget = H => Math.min(projMax(H), H + state.projExtra);
+
+function draw() {
+  if (!geo) layout();
+  const { w, h, m, xr, yr, X, Y } = geo;
+  ctx.clearRect(0, 0, w, h);
+  const C = { line: css("--line"), muted: css("--muted"), dot: css("--dot"), b1: css("--band1"), b2: css("--band2"),
+    pink: css("--pink"), gold: css("--gold"), thin: css("--thin"), ink: css("--pink-ink"), proj: css("--proj") };
+  ctx.fillStyle = C.thin; const tx = X(P.thin); ctx.fillRect(tx, m.t, w - m.r - tx, h - m.t - m.b);
+  ctx.font = `700 11.5px ${css("--f")}`; ctx.lineWidth = 1;
+  const xt = ticks(xr[0], xr[1], state.log), yt = ticks(yr[0], yr[1], state.log);
+  if (state.log) {
+    ctx.strokeStyle = C.line; ctx.globalAlpha = .35; ctx.beginPath();
+    for (let e = 0; e <= 4; e++) for (let k = 2; k < 10; k++) { const v = k * 10 ** e; if (v > xr[0] && v < xr[1]) { ctx.moveTo(X(v), m.t); ctx.lineTo(X(v), h - m.b); } }
+    for (let e = 0; e <= 5; e++) for (let k = 2; k < 10; k++) { const v = k * 10 ** e; if (v > yr[0] && v < yr[1]) { ctx.moveTo(m.l, Y(v)); ctx.lineTo(w - m.r, Y(v)); } }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  ctx.strokeStyle = C.line; ctx.fillStyle = C.muted; ctx.beginPath();
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  xt.forEach(v => { ctx.moveTo(X(v), m.t); ctx.lineTo(X(v), h - m.b); ctx.fillText(tickLabel(v), X(v), h - m.b + 8); });
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  yt.forEach(v => { ctx.moveTo(m.l, Y(v)); ctx.lineTo(w - m.r, Y(v)); ctx.fillText(tickLabel(v), m.l - 8, Y(v)); });
+  ctx.stroke();
+  ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("hours played →", w - m.r, h - 1);
+  ctx.save(); ctx.translate(12, m.t + 4); ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("pp ↑", 0, 0); ctx.restore();
+  ctx.fillStyle = C.gold; ctx.globalAlpha = .8; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+  if (tx < w - m.r - 60) ctx.fillText(geo.narrow ? "few players" : "few players out here", tx + 6, h - m.b - 6);
+  ctx.globalAlpha = 1;
+  ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, w - m.l - m.r, h - m.t - m.b); ctx.clip();
+  const key = `${geo.w}x${geo.h}|${state.log}|${C.dot}`;
+  if (dotKey !== key) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dotLayer = dotLayer || document.createElement("canvas");
+    dotLayer.width = Math.round(w * dpr); dotLayer.height = Math.round(h * dpr);
+    const dc = dotLayer.getContext("2d"); dc.setTransform(dpr, 0, 0, dpr, 0, 0); dc.fillStyle = C.dot;
+    const pr = geo.narrow ? 1.3 : 1.6;
+    for (const i of DOTS) { dc.beginPath(); dc.arc(X(Hs[i]), Y(PPs[i]), pr, 0, 6.283); dc.fill(); }
+    dotKey = key;
+  }
+  ctx.drawImage(dotLayer, 0, 0, w, h);
+  const xsN = 220, xs = []; for (let i = 0; i <= xsN; i++) xs.push(H0 * (H1 / H0) ** (i / xsN));
+  const bandPath = (zl, zh, col) => { ctx.beginPath(); xs.forEach((x, i) => i ? ctx.lineTo(X(x), Y(band(x, zh))) : ctx.moveTo(X(x), Y(band(x, zh))));
+    for (let i = xs.length - 1; i >= 0; i--) ctx.lineTo(X(xs[i]), Y(band(xs[i], zl))); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); };
+  bandPath(-2, 2, C.b2); bandPath(-1, 1, C.b1);
+  ctx.beginPath(); xs.forEach((x, i) => i ? ctx.lineTo(X(x), Y(medPP(x))) : ctx.moveTo(X(x), Y(medPP(x))));
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 8; ctx.globalAlpha = .10; ctx.lineCap = "round"; ctx.stroke();
+  ctx.globalAlpha = .95; ctx.lineWidth = 2.6; ctx.stroke(); ctx.globalAlpha = 1;
+
+  const labels = [];
+  // trend point (gold, on the median line)
+  if (state.trend) {
+    const H = state.estH, x = X(H), y = Y(medPP(H));
+    ctx.strokeStyle = C.gold; ctx.globalAlpha = .55; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x, Y(band(H, -1))); ctx.lineTo(x, Y(band(H, 1))); ctx.stroke(); ctx.globalAlpha = 1;
+    hitCircle(x, y, C.gold);
+    labels.push([x, y, `${fmt(medPP(H))} pp @ ${dh(H)}`, C.gold, "#2a2108", "bl"]);
+  }
+  // projection (red line + range, white diamond target)
+  if (state.you && state.proj) {
+    const [H, pp] = state.you, Hmax = projMax(H), Ht = projTarget(H), n = 120;
+    const pts = []; for (let i = 0; i <= n; i++) pts.push(H * (Hmax / H) ** (i / n));
+    ctx.beginPath();
+    pts.forEach((x, i) => { const u = projAt(H, pp, x)[2]; i ? ctx.lineTo(X(x), Y(u)) : ctx.moveTo(X(x), Y(u)); });
+    for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(X(pts[i]), Y(projAt(H, pp, pts[i])[1]));
+    ctx.closePath(); ctx.fillStyle = C.proj; ctx.globalAlpha = .14; ctx.fill(); ctx.globalAlpha = 1;
+    const line = (to, dash, alpha, width) => { ctx.beginPath(); ctx.setLineDash(dash); ctx.globalAlpha = alpha; ctx.lineWidth = width;
+      pts.filter(x => x <= to).forEach((x, i) => { const y = Y(projAt(H, pp, x)[0]); i ? ctx.lineTo(X(x), y) : ctx.moveTo(X(x), y); });
+      ctx.strokeStyle = C.proj; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; };
+    // faint dotted reference: where you'd be if you kept your percentile forever
+    ctx.beginPath(); ctx.setLineDash([2, 4]); ctx.globalAlpha = .45; ctx.lineWidth = 1.5;
+    pts.forEach((x, i) => { const y = Y(projKeep(H, pp, x)); i ? ctx.lineTo(X(x), y) : ctx.moveTo(X(x), y); });
+    ctx.strokeStyle = "#ffffff"; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    line(Hmax, [5, 5], .55, 2); line(Ht, [], 1, 3.2);
+    const [k, lo, hi] = projAt(H, pp, Ht), px = X(Ht), py = Y(k);
+    ctx.beginPath(); ctx.moveTo(px, Y(lo)); ctx.lineTo(px, Y(hi));
+    ctx.strokeStyle = C.proj; ctx.globalAlpha = .6; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = C.proj; ctx.globalAlpha = .3; ctx.fillRect(-14, -14, 28, 28); ctx.globalAlpha = 1;
+    ctx.fillStyle = "#fff"; ctx.fillRect(-8, -8, 16, 16); ctx.lineWidth = 3.5; ctx.strokeStyle = C.proj; ctx.strokeRect(-8, -8, 16, 16);
+    ctx.restore();
+    labels.push([px, py, `${fmt(k)} pp @ ${dh(Ht)}`, C.proj, "#fff", "al"]);
+  }
+  // you (pink)
+  if (state.you) {
+    const [H, pp] = state.you, x = X(H), y = Y(pp);
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = C.pink; ctx.globalAlpha = .6; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, h - m.b); ctx.moveTo(m.l, y); ctx.lineTo(w - m.r, y); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    hitCircle(x, y, C.pink);
+    labels.unshift([x, y, `YOU · ${fmt(pp)} pp`, C.pink, C.ink, "ar"]);
+  }
+  ctx.restore();
+  placeLabels(labels);
+}
+// marker drawn like an osu! hit circle, with an approach circle that closes in once
+function hitCircle(x, y, col) {
+  if (pulse > 0) { ctx.strokeStyle = col; ctx.globalAlpha = Math.min(1, pulse * 1.4); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 12 + 40 * pulse, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 1; }
+  const g = ctx.createRadialGradient(x, y, 4, x, y, 26); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.globalAlpha = .45; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 26, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.arc(x, y, 11, 0, 6.283); ctx.fillStyle = col; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+}
+// pill labels: try each corner around the marker, keep the first that stays inside and clear of earlier labels
+function placeLabels(list) {
+  const { w, h, m } = geo, placed = [], ph = 26;
+  ctx.font = `900 13px ${css("--f")}`;
+  const hits = (a, b) => a.x < b.x + b.w + 4 && b.x < a.x + a.w + 4 && a.y < b.y + b.h + 4 && b.y < a.y + a.h + 4;
+  for (const [x, y, text, bg, ink, pref] of list) {
+    const pw = ctx.measureText(text).width + 22;
+    const spot = c => ({ x: c[1] === "l" ? x - 20 - pw : x + 20, y: c[0] === "b" ? y + 12 : y - ph - 10, w: pw, h: ph });
+    const order = [pref, ...["ar", "br", "al", "bl"].filter(c => c !== pref)];
+    let best = null;
+    for (const c of order) { const r = spot(c);
+      if (r.x < m.l + 2 || r.x + r.w > w - m.r - 2 || r.y < m.t + 2 || r.y + r.h > h - m.b - 2) continue;
+      if (placed.some(p => hits(p, r))) continue; best = r; break; }
+    if (!best) { best = spot(pref); best.x = Math.min(Math.max(best.x, m.l + 2), w - m.r - pw - 2); best.y = Math.min(Math.max(best.y, m.t + 2), h - m.b - ph - 2); }
+    placed.push(best);
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(best.x, best.y, pw, ph, 13) : ctx.rect(best.x, best.y, pw, ph); ctx.fill();
+    ctx.fillStyle = ink; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(text, best.x + 11, best.y + ph / 2 + 1);
+  }
+}
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function approach() {
+  if (reduceMotion) { pulse = 0; draw(); return; }
+  const t0 = performance.now(), dur = 520;
+  const step = t => { pulse = Math.max(0, 1 - (t - t0) / dur); draw(); if (pulse > 0) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
+// ---------- result card
+const card = $("card");
+const GRADES = [[99, "SS", "#e94c97", "#ffd84a"], [95, "S", "#1fb3c4", "#ffd84a"], [80, "A", "#8cc63f", "#fff"],
+  [50, "B", "#3f8fe0", "#fff"], [20, "C", "#9a5ce0", "#fff"], [0, "D", "#e0465f", "#fff"]];
+const grade = p => GRADES.find(([cut]) => p >= cut);
+const pill = (g, sm) => `<span class="pill ${sm ? "sm" : ""}" style="--g:${g[2]};--t:${g[3]}">${g[1]}</span>`;
+const gradeKey = cur => `<div class="key">${GRADES.map(g =>
+  `<span class="${g[1] === cur ? "cur" : ""}">${pill(g, true)} ${g[0] ? `${g[0]}%+` : "<20%"}</span>`).join("")}</div>`;
+const stat = (label, value, note, cls = "") => `<div class="tile"><dt>${label}</dt><dd class="${cls}">${value}</dd>${note ? `<div class="note">${note}</div>` : ""}</div>`;
+function renderCompare() {
+  const [H, pp] = state.you, r = compare(H, pp), pos = r.z >= 0;
+  const pct = r.pct, gr = grade(pct), g = gr[1], est = rankOf(pp);
+  const above = 100 * (1 - fracAbove(pp).f);
+  const warn = H > H1 ? "Beyond the sample, so this is extrapolated." : H > P.thin ? "Few players have this much play time, so treat these numbers as rough." : "";
+  const rankTile = state.rank
+    ? stat("Global rank", `#${fmt(state.rank)}`, "yours, from your profile")
+    : stat("Global rank", est.text, "estimated from your pp");
+  card.innerHTML = `
+    <div class="eyebrow">Better than</div>
+    <div class="score">
+      <div class="headline">${fmt(pct, 1)}<small>%</small></div>
+      <div class="grade">${pill(gr)}<div class="grade-cap">rank</div></div>
+      <div class="headline-sub">of players with about your play time (${dh(H)}) have less pp than you <span style="color:var(--muted)">${r.nH ? `· ~${fmt(r.nH)} players, weighted by how close their hours are` : "· model estimate: almost no real players have this much play time"}</span></div>
+    </div>
+    <dl class="tiles">
+      ${stat("Std devs", `${pos ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ`, `${pos ? "above" : "below"} typical at ${fmt(H)} h`, "pink")}
+      ${stat("Typical pp", fmt(r.median), `you have ${fmt(r.ratio, 2)}× that`)}
+      ${stat("Faster than", `${fmt(r.faster, 1)}%`, r.nP ? `of players at your pp; typical took ${dh(r.medHours)}` : `model estimate; typical took ${dh(r.medHours)}`, "blue")}
+      ${stat("More pp than", `${fmt(above, 1)}%`, "of all ranked players")}
+      ${rankTile}
+      ${stat("Star level", starPill(pp, true), pp > 10000 ? "typical stars of top plays (extrapolated past 10k pp)" : "typical stars of top plays at your pp")}
+    </dl>
+    ${warn ? `<p class="warn">${warn}</p>` : ""}
+    ${gradeKey(g)}`;
+}
+
+// ---------- boxes
+// real pp gained per hour by players near the median, from 6-month windows of 2,183 histories.
+// [hours, low, high]: the two sensible ways of handling bonus pp; the page shows the middle with this range
+const REAL_PPH = HIST.pph || [];
+function realPPH(H) {
+  if (REAL_PPH.length < 2 || H < 5 || H > 1500) return null;
+  const lo = interp(REAL_PPH.map(r => [Math.log(r[0]), r[1]]), Math.log(H)), hi = interp(REAL_PPH.map(r => [Math.log(r[0]), r[2]]), Math.log(H));
+  return [lo, hi];
+}
+// hours until the projection (and its range) first reaches a target pp; null if not within the projection window
+function hoursTo(H, pp, target, which) {
+  const Hmax = projMax(H); if (projAt(H, pp, Hmax)[which] < target) return null;
+  let a = H, b = Hmax;
+  for (let i = 0; i < 50; i++) { const m = Math.sqrt(a * b); projAt(H, pp, m)[which] >= target ? b = m : a = m; }
+  return b;
+}
+const MILESTONES = [500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7500, 10000, 12500, 15000, 20000];
+function renderProj() {
+  if (!state.you) return;
+  const [H0_, pp0_] = state.you, zz = zNow(H0_, pp0_);
+  const box = $("proj-row"), note = box.querySelector(".proj-off");
+  if (H0_ >= H1 || Math.abs(zz) > 6) {
+    box.querySelectorAll(".box-head, .box-meta, input, .box-val, .hint").forEach(e => e.hidden = true);
+    const n = note || Object.assign(document.createElement("p"), { className: "hint proj-off" });
+    n.textContent = H0_ >= H1 ? "No projection: that's more play time than any player in the data, so there's nothing to base it on."
+      : "No projection: no real player is anywhere near this combination of hours and pp, so the drift measured from real players doesn't apply.";
+    n.hidden = false; if (!note) box.appendChild(n);
+    return;
+  }
+  box.querySelectorAll(".box-head, .box-meta, input, .box-val, .hint").forEach(e => e.hidden = false);
+  if (note) note.hidden = true;
+  const [H, pp] = state.you, Ht = projTarget(H), [k, l, u] = projAt(H, pp, Ht);
+  const rk = rankOf(k);
+  $("proj-pp").innerHTML = `~${fmt(k)}<small> pp</small>`;
+  $("proj-rank").innerHTML = `${rk.text} ${starPill(k)}`;
+  $("proj-rank-note").textContent = `rank on today's leaderboard (${rankNote()}) · typical star level`;
+  $("proj-meta").innerHTML = `<span>+${fmt(k - pp)} pp from now</span><span><i>range</i> ${fmt(l)}–${fmt(u)} pp</span><span><i>rank range</i> ${rankOf(u).text.replace("top ", "")}–${rankOf(l).text.replace("~", "")}</span>${Ht > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
+  $("proj-val").innerHTML = `${dh(Ht)}<small>+${dh(Ht - H)} from now</small>`;
+  const goal = MILESTONES.find(m => m > pp * 1.03);
+  if (goal) {
+    const mid = hoursTo(H, pp, goal, 0), fast = hoursTo(H, pp, goal, 2), slow = hoursTo(H, pp, goal, 1);
+    const txt = mid ? `~${dh(mid - H)} more` + (fast ? ` <i>(${dh(fast - H)}–${slow ? dh(slow - H) : "longer"})</i>` : "") : "beyond this projection";
+    $("proj-meta").innerHTML += `<span><i>next milestone</i> <b style="color:#fff">${fmt(goal)} pp</b> in ${txt}</span>`;
+  }
+}
+const tlo = Math.log10(H0), thi = Math.log10(H1);
+function renderTrend() {
+  const H = state.estH, m = medPP(H), rk = rankOf(m);
+  $("trend-slider").value = Math.round((Math.log10(H) - tlo) / (thi - tlo) * 1000);
+  $("trend-pp").innerHTML = `${fmt(m)}<small> pp</small>`;
+  $("trend-rank").innerHTML = `${rk.text} ${starPill(m)}`;
+  $("trend-rank-note").textContent = `rank ${rankNote()} · typical star level`;
+  $("trend-meta").innerHTML = `<span><i>middle 68%</i> ${fmt(band(H, -1))}–${fmt(band(H, 1))}</span><span><i>middle 95%</i> ${fmt(band(H, -2))}–${fmt(band(H, 2))}</span>${realPPH(H) ? `<span><i>real players gained</i> <b style="color:#fff">~${fmt((realPPH(H)[0] + realPPH(H)[1]) / 2, 0)} pp/h</b> <i>(${fmt(realPPH(H)[0], 0)}–${fmt(realPPH(H)[1], 0)})</i></span>` : ""}<span><i>curve slope</i> ~${fmt(ppPerHour(H), 1)} pp/h</span><span><i>exponent</i> ${fmt(expo(H), 2)}</span>${H > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
+  $("trend-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small>`;
+}
+const renderAll = () => { renderCompare(); renderProj(); renderTrend(); };
+
+// ---------- inputs
+const inputs = { Days: $("in-days"), Hours: $("in-hours"), pp: $("in-pp"), Rank: $("in-rank") };
+function showError(err, fields) {
+  const t = $("toast"), [, msg, tip] = err;
+  t.innerHTML = `<span class="toast-x" aria-hidden="true">✕</span><span class="toast-msg"><span>Not allowed · ${msg}</span>${tip ? `<small>${tip}</small>` : ""}</span>`;
+  t.hidden = false;
+  Object.entries(inputs).forEach(([k, i]) => i.classList.toggle("bad", fields.includes(k)));
+}
+function clearError() { $("toast").hidden = true; Object.values(inputs).forEach(i => i.classList.remove("bad")); }
+function readInputs() {
+  const errs = [];
+  let d = 0, hh = 0, pp = 0, rank = null;
+  try { d = num(inputs.Days.value, "Days", { blank: true, max: 5000 }); } catch (e) { errs.push(e); }
+  try { hh = num(inputs.Hours.value, "Hours", { blank: true, max: 24 }); } catch (e) { errs.push(e); }
+  try { pp = num(inputs.pp.value, "pp", { zero: false, max: 40000 }); } catch (e) { errs.push(e); }
+  try { rank = parseRank(inputs.Rank.value); } catch (e) { errs.push(e); }
+  const H = d * 24 + hh;
+  if (!errs.some(e => e[0] === "Days" || e[0] === "Hours") && H < 1) errs.push(["Hours", "Need at least 1 hour of play time", "Nobody under 1 hour is in the sample"]);
+  let Ncal = null;
+  if (rank && !errs.some(e => e[0] === "pp" || e[0] === "Rank")) {
+    const fa = shareAbove(pp); Ncal = rank / fa.f;
+    const ratio = Ncal / N_DEFAULT, typical = sig3(Math.round(N_DEFAULT * fa.f));
+    if (ratio < 1 / 4 || ratio > 4) errs.push(["Rank", "That rank doesn't fit your pp",
+      `${fmt(pp)} pp is usually around #${fmt(typical)}. Check the osu!standard Global Ranking on your profile`]);
+  }
+  return errs.length ? { errs } : { H, pp, rank, Ncal };
+}
+let errTimer, lastKey = "";
+function check(animate) {
+  clearTimeout(errTimer);
+  const r = readInputs();
+  if (r.errs) {
+    const fields = r.errs.map(e => e[0]); if (r.errs[0][1].startsWith("Need")) fields.push("Days");
+    const show = () => showError(r.errs[0], fields);
+    animate ? show() : (errTimer = setTimeout(show, 450));
+    return;
+  }
+  clearError();
+  state.rank = r.rank; if (r.rank) state.Ncal = r.Ncal;
+  const key = `${r.H}|${r.pp}`;
+  state.you = [r.H, r.pp]; renderAll();
+  if (animate || key !== lastKey) approach(); else draw();
+  lastKey = key;
+}
+$("compare-form").addEventListener("submit", e => { e.preventDefault(); check(true); });
+Object.values(inputs).forEach(i => {
+  i.addEventListener("input", () => check(false));
+  i.addEventListener("blur", () => { if (readInputs().errs) check(true); });
+});
+inputs.Rank.addEventListener("input", () => { if (inputs.Rank.value.trim() === "") { state.Ncal = null; state.rank = null; renderAll(); draw(); } });
+
+// ---------- toggles + sliders
+$("proj-slider").addEventListener("input", e => { state.projExtra = extraFromSlider(+e.target.value); renderProj(); draw(); });
+$("proj-reset").onclick = () => { state.projExtra = 0; $("proj-slider").value = 0; renderProj(); approach(); };
+$("trend-reset").onclick = () => { if (state.you) { state.estH = state.you[0]; renderTrend(); approach(); } };
+$("trend-slider").addEventListener("input", e => { state.estH = 10 ** (tlo + e.target.value / 1000 * (thi - tlo)); renderTrend(); draw(); });
+function toggle(key, btn, box, legend) {
+  state[key] = !state[key]; $(btn).setAttribute("aria-checked", state[key]);
+  $(box).hidden = !state[key]; $(legend).hidden = !state[key];
+  renderAll(); state[key] ? approach() : draw();
+}
+$("proj-btn").onclick = () => toggle("proj", "proj-btn", "proj-row", "lg-proj");
+$("trend-btn").onclick = () => toggle("trend", "trend-btn", "trend-row", "lg-est");
+$("axes-btn").onclick = () => { state.log = !state.log; $("axes-btn").setAttribute("aria-checked", state.log); layout(); draw(); };
+
+// ---------- drag your dot (or tap the plot) to try other hours and pp; works on log and linear axes
+const drag = { on: false, moved: false };
+const local = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+const inPlot = (x, y) => geo && x >= geo.m.l && x <= geo.w - geo.m.r && y >= geo.m.t && y <= geo.h - geo.m.b;
+const nearDot = (x, y) => state.you && Math.hypot(x - geo.X(state.you[0]), y - geo.Y(state.you[1])) < 26;
+function moveYouTo(x, y) {
+  const { m, w, h } = geo;
+  x = Math.min(Math.max(x, m.l), w - m.r); y = Math.min(Math.max(y, m.t), h - m.b);
+  const H = Math.max(1, Math.round(geo.Xinv(x))), pp = Math.max(1, Math.round(geo.Yinv(y)));
+  inputs.Days.value = Math.floor(H / 24); inputs.Hours.value = H % 24; inputs.pp.value = pp;
+  inputs.Rank.value = ""; state.rank = null;            // a dragged point is hypothetical; keep the rank scale it tuned
+  clearError(); state.you = [H, pp]; lastKey = `${H}|${pp}`; renderAll(); draw();
+}
+cv.addEventListener("touchstart", e => {
+  const t = e.touches[0], b = cv.getBoundingClientRect();
+  if (geo && nearDot(t.clientX - b.left, t.clientY - b.top)) e.preventDefault();
+}, { passive: false });
+cv.addEventListener("pointerdown", e => {
+  if (!geo) return;
+  const [x, y] = local(e); if (!inPlot(x, y)) return;
+  drag.on = true; drag.moved = false; drag.grabbed = nearDot(x, y); drag.x0 = x; drag.y0 = y;
+  if (drag.grabbed) { cv.setPointerCapture(e.pointerId); cv.classList.add("dragging"); }
+});
+cv.addEventListener("pointermove", e => {
+  if (!geo) return;
+  const [x, y] = local(e);
+  if (drag.on && drag.grabbed) { drag.moved = true; moveYouTo(x, y); return; }
+  if (drag.on && Math.hypot(x - drag.x0, y - drag.y0) > 8) drag.moved = true;
+  cv.classList.toggle("drag-ok", inPlot(x, y));
+});
+cv.addEventListener("pointerup", e => {
+  if (!drag.on) return;
+  const [x, y] = local(e);
+  if (!drag.grabbed && !drag.moved && inPlot(x, y)) moveYouTo(x, y);
+  if (drag.grabbed || !drag.moved) approach();
+  drag.on = false; cv.classList.remove("dragging");
+});
+cv.addEventListener("pointercancel", () => { drag.on = false; cv.classList.remove("dragging"); });
+
+new ResizeObserver(() => { layout(); draw(); }).observe(cv);
+
+// drifting triangles behind the header, like the game's menu background
+(() => {
+  const tc = $("tri"), tx = tc.getContext("2d"); let W = 0, Hh = 0, tris = [];
+  const cols = ["255,102,170", "102,204,255", "194,122,255", "255,255,255"];
+  const make = (y) => ({ x: Math.random() * W, y: y ?? Math.random() * Hh, s: 18 + Math.random() * 70,
+    v: .12 + Math.random() * .35, c: cols[Math.floor(Math.random() * cols.length)], a: .04 + Math.random() * .1 });
+  const size = () => { const r = tc.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+    W = r.width; Hh = r.height; tc.width = W * d; tc.height = Hh * d; tx.setTransform(d, 0, 0, d, 0, 0);
+    tris = Array.from({ length: Math.round(W / 26) }, () => make()); };
+  const paint = () => { tx.clearRect(0, 0, W, Hh);
+    for (const t of tris) { tx.fillStyle = `rgba(${t.c},${t.a})`; tx.beginPath();
+      tx.moveTo(t.x, t.y - t.s * .58); tx.lineTo(t.x + t.s / 2, t.y + t.s * .29); tx.lineTo(t.x - t.s / 2, t.y + t.s * .29); tx.closePath(); tx.fill(); } };
+  const tick = () => { for (const t of tris) { t.y -= t.v; if (t.y < -t.s) Object.assign(t, make(Hh + t.s)); } paint(); requestAnimationFrame(tick); };
+  new ResizeObserver(() => { size(); paint(); }).observe(tc);
+  size(); paint(); if (!reduceMotion) requestAnimationFrame(tick);
+})();
+document.fonts?.ready.then(draw);
+
+state.you = [54, 2156];
+(() => {
+  const fill = (k, v) => document.querySelectorAll(`[data-f="${k}"]`).forEach(e => e.textContent = v);
+  fill("n", fmt(M.n)); fill("thin", fmt(Math.round(M.thin / 10) * 10)); fill("built", M.built);
+  fill("sources", M.sources && M.sources[0] && /^\d{4}_/.test(M.sources[0]) ? ` (${M.sources.map(s => s.replace(/_/g, "-")).join(", ")})` : "");
+  fill("ranksrc", M.rank.source || "real players' ranks");
+  if (HIST.players) fill("hist", fmt(HIST.players));
+  if (HIST.stars) { fill("starsn", fmt(HIST.stars.n)); fill("starspread", Math.round((Math.exp(HIST.stars.spread || 0.08) - 1) * 100)); }
+  if (HIST.drift) { fill("klo", fmt(HIST.drift.lo, 2)); fill("khi", fmt(HIST.drift.hi, 2)); }
+})();
+layout();
+check(true);
+}).catch(err => {
+  console.error(err);
+  document.getElementById("card").innerHTML = '<p class="warn">Couldn\'t load the player data. Refresh the page to try again.</p>';
+});
+</script>
+</body>
+</html>

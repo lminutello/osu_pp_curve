@@ -1,0 +1,50 @@
+name: Refresh model (monthly)
+
+# Rebuilds data/model.json from the newest osu! data dumps (data.ppy.sh publishes them about monthly)
+# and refits the saved player histories against the new curve. No API key needed.
+on:
+  schedule:
+    - cron: "23 7 4 * *"      # 07:23 UTC on the 4th of every month
+  workflow_dispatch:          # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install numpy
+        run: pip install "numpy>=1.26,<3"
+
+      - name: Build from the newest dumps
+        run: python scripts/build_model.py --write-users .cache/users.csv
+
+      - name: Refit player histories against the new curve
+        if: hashFiles('data/history.jsonl.gz') != ''
+        run: |
+          python scripts/fit_histories.py
+          python scripts/build_model.py --users-csv .cache/users.csv
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/model.json data/history_fit.json
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Monthly model refresh ($(date -u +%Y-%m-%d))"
+            git push
+          fi
