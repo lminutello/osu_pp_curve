@@ -139,8 +139,14 @@ def main():
             pph.append([round(math.exp((math.log(lo) + math.log(hi)) / 2), 1), round(min(meds), 1), round(max(meds), 1)])
     print("pp/hour:", pph)
 
+    # when the newest player was pulled (records from older pulls have no date: keep the previous value)
+    pulled = max((r["pulled"] for r in recs if r.get("pulled")), default=None)
+    if not pulled and os.path.exists(args.out):
+        with open(args.out) as f:
+            pulled = json.load(f).get("pulledAt")
     out = {
         "fitted": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "pulledAt": pulled,
         "players": len(recs),
         "stars": {"a": round(float(a2), 5), "b": round(float(b2), 5), "c": round(float(c2), 6), "n": len(S),
                   "spread": round(float(np.std(resid)), 3)},

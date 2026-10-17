@@ -56,13 +56,37 @@ body {
 @keyframes approach { 0% { transform: scale(1.55); opacity: 0; } 15% { opacity: .9; } 70% { transform: scale(.86); opacity: .9; } 72%, 100% { opacity: 0; transform: scale(.86); } }
 h1 { margin: 0; font: 900 clamp(26px, 4.4vw, 40px)/1.05 var(--f); letter-spacing: -.01em; text-wrap: balance; }
 h1 .o { color: var(--pink); }
-/* data status, top right of the header: when the numbers were last rebuilt and from what */
-.status { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; align-self: center; margin-bottom: 14px;
-  padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.08);
-  font-size: 12px; font-weight: 700; color: var(--fg-2); line-height: 1.35; }
-.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); grid-row: span 3; }
+/* data status, top right of the header: one short line per data source; click for the details */
+.status { align-self: center; margin-bottom: 14px; max-width: 380px; border-radius: 12px; background: rgba(0,0,0,.30);
+  border: 1px solid rgba(255,255,255,.08); font-size: 12.5px; font-weight: 700; color: var(--fg-2); line-height: 1.4; }
+.status summary { list-style: none; cursor: pointer; padding: 9px 12px; display: grid; gap: 4px; border-radius: 12px; }
+.status summary::-webkit-details-marker { display: none; }
+.status summary:hover { background: rgba(255,255,255,.04); }
+.status .row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.status .tag { font: 900 9.5px var(--f); letter-spacing: .1em; text-transform: uppercase; color: var(--blue); width: 66px; }
+.status .tag.h { color: var(--proj); }
+.status .meta b { color: #fff; font-weight: 900; }
+.status .meta.old { color: var(--gold); } .status .meta.busy { color: var(--blue); }
+.status .more-hint { margin-left: auto; color: var(--muted); font-size: 11px; transition: transform .2s; }
+.status[open] .more-hint { transform: rotate(180deg); }
+.status .more { padding: 0 12px 11px; display: grid; gap: 7px; font-size: 12px; color: var(--fg-2); }
+.status .more p { margin: 0; } .status .more b { color: #fff; }
+.status .more .u { color: var(--muted); font-size: 11.5px; }
+.status .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status .dot.old { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+.status .dot.busy { background: var(--blue); box-shadow: 0 0 8px var(--blue); animation: busy 1.1s ease-in-out infinite; }
+@keyframes busy { 50% { opacity: .35; transform: scale(.75); } }
+@media (prefers-reduced-motion: reduce) { .status .dot.busy { animation: none; } }
+.status .ready { color: var(--green); font-size: 12px; font-weight: 800; white-space: normal; }
+.status .ready a { color: #fff; }
+.status .src { display: grid; grid-template-columns: 8px 70px minmax(0, 1fr); gap: 0 8px; align-items: baseline; }
+.status .src .dot { align-self: center; }
+.status .src small { grid-column: 3; }
+.status .tag { font: 900 9.5px/1.9 var(--f); letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
+.status .tag.h { color: var(--proj); }
+.status .src small { color: var(--muted); font-size: 11px; font-weight: 700; }
+.status .src small.warn2 { color: var(--gold); }
 .status b { color: #fff; font-weight: 900; }
-.status .old { color: var(--gold); }
 .sub { margin: 6px 0 0; color: var(--fg-2); font-weight: 600; font-size: 14px; max-width: 60ch; opacity: .85; }
 
 .tabs { display: flex; gap: 6px; align-self: end; margin-top: 6px; }
@@ -150,12 +174,23 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .box-val { font: 900 18px/1.1 var(--f); color: #fff; text-align: right; font-variant-numeric: tabular-nums; min-width: 7ch; }
 .box-val small { display: block; font-size: 12px; color: var(--muted); font-weight: 800; }
 .box .hint { grid-column: 1 / -1; }
+/* click-to-expand explanations */
+.fold { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.fold > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: var(--muted); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: "▾"; font-size: 10px; transition: transform .2s; }
+.fold[open] > summary::after { transform: rotate(180deg); }
+.fold > summary:hover { color: var(--fg-2); }
+.fold > p { margin: 6px 0 0; line-height: 1.5; }
+.box .fold { grid-column: 1 / -1; }
+.controls .fold { flex-basis: 100%; }
 .sw.proj { width: 14px; height: 3px; background: var(--proj); }
 /* star pill, colored along the game's difficulty spectrum */
 .star { display: inline-flex; align-items: center; gap: 3px; padding: 1px 9px 1px 8px; border-radius: 999px; background: var(--sc);
   color: var(--st); font: 900 14px/1.5 var(--f); font-variant-numeric: tabular-nums; vertical-align: middle; white-space: nowrap;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 12px -6px var(--sc); }
 .star.big { font-size: 20px; padding: 2px 12px 2px 10px; }
+.box-rank .star { color: var(--st); font-size: 14px; }   /* beat ".box-rank span" so the pill keeps its own text color */
 .box-rank strong { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .sw.projdot { width: 10px; height: 10px; background: #fff; border: 2px solid var(--proj); transform: rotate(45deg); border-radius: 2px; }
 
@@ -199,6 +234,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 
 footer { color: var(--muted); font-size: 12.5px; max-width: 82ch; display: grid; gap: 6px; font-weight: 600; }
 footer p { margin: 0; }
+footer .fold > p { margin-top: 8px; }
 footer .lead { color: var(--fg-2); font-size: 14px; font-weight: 700; }
 canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) { .circle::after, .toast, .field input.bad { animation: none; } }
@@ -215,7 +251,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="circle" aria-hidden="true"></div>
         <div><h1><span class="o">osu!</span> pp vs hours played</h1></div>
       </div>
-      <div class="status" id="status" aria-live="polite"><span class="dot"></span><span>Loading data…</span></div>
+      <details class="status" id="status"><summary><span class="row"><span class="dot"></span><span class="meta">Loading data…</span></span></summary></details>
     </div>
   </header>
 
@@ -240,7 +276,8 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="field"><label for="in-hours">Hours</label><input id="in-hours" inputmode="decimal" value="6"></div>
         <div class="field"><label for="in-pp">pp</label><input id="in-pp" class="pp" inputmode="decimal" value="2156"></div>
         <div class="field"><label for="in-rank">Global rank <small>(optional)</small></label><input id="in-rank" class="rank" inputmode="numeric" placeholder="optional"></div>
-        <p class="hint">Copy these from your profile (hours 0–24, minutes don't matter), or drag your dot on the chart. Adding your global rank makes every rank estimate on the page more accurate. Example shown: sakul333.</p>
+        <p class="hint">From your osu! profile, or drag your dot on the chart.</p>
+        <details class="fold"><summary>More about these</summary><p>Days and hours come from Total Play Time (hours 0–24; minutes don't matter). Global rank is optional: adding it tunes every rank estimate on the page to you. Results update as you type. Example shown: sakul333.</p></details>
       </form>
 
       <div class="toggles">
@@ -257,7 +294,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="box-meta" id="proj-meta"></div>
         <input type="range" id="proj-slider" min="0" max="1000" step="1" value="726" aria-label="Extra hours of play from now">
         <div class="box-val" id="proj-val"></div>
-        <p class="hint">From <span data-f="hist">thousands of</span> real players' histories: players ahead of the trend drift back toward it as they play, and players behind it catch up. That direction held up in every check; the exact speed didn't, so the red line uses a middle value and the shaded red is wide on purpose. It covers both the uncertain speed and how much real players starting where you are spread out. Faint dotted line: if you kept your exact percentile forever.</p>
+        <details class="fold"><summary>How this projection works</summary><p>From <span data-f="hist">thousands of</span> real players' histories: players ahead of the trend drift back toward it as they play, and players behind it catch up. That direction held up in every check; the exact speed didn't, so the red line uses a middle value and the shaded red is wide on purpose. It covers both the uncertain speed and how much real players starting where you are spread out. Faint dotted line: if you kept your exact percentile forever.</p></details>
       </div>
 
       <div class="box gold" id="trend-row" hidden>
@@ -269,7 +306,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="box-meta" id="trend-meta"></div>
         <input type="range" id="trend-slider" min="0" max="1000" step="1" value="0" aria-label="Hours played for the trend point">
         <div class="box-val" id="trend-val"></div>
-        <p class="hint">Yellow dot: the median player at that play time, with the middle 68% of players as the yellow bar. "Real players gained" is how fast players near the median actually improved at this stage, from <span data-f="hist">thousands of</span> tracked histories. It runs above the curve's slope past ~40 hours, because the snapshot curve also counts people who stopped playing.</p>
+        <details class="fold"><summary>What these numbers mean</summary><p>Yellow dot: the median player at that play time, with the middle 68% of players as the yellow bar. "Real players gained" is how fast players near the median actually improved at this stage, from <span data-f="hist">thousands of</span> tracked histories. It runs above the curve's slope past ~40 hours, because the snapshot curve also counts people who stopped playing.</p></details>
       </div>
     </section>
 
@@ -278,11 +315,13 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
 
   <footer>
     <p class="lead">Where you stand against <span data-f="n">thousands of</span> randomly sampled ranked osu!standard players from the official osu! data dumps<span data-f="sources"></span>.</p>
+    <details class="fold"><summary>How the numbers are made</summary>
     <p>Curve: ln(pp) fitted as a quadratic in ln(hours), so the growth exponent shrinks as play time goes up. σ is the spread of ln(pp) among players at that play time, measured locally. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
     <p>Ranks: the sample gives the share of ranked players above any pp; the leaderboard size and a correction for high pp come from <span data-f="ranksrc">real players' ranks</span>. Entering your own rank fine-tunes it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out.</p>
     <p>Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
     <p>Data: data.ppy.sh random_10000 dumps and the osu! API; players with under 1 hour logged are excluded from the curve. Hours = total_seconds_played. Past about <span data-f="thin">1,000</span> hours only 2% of players remain, so read that region loosely. The model rebuilds itself monthly; this version was built <span data-f="built">recently</span>.</p>
+    </details>
     <p class="credits">Made by Lukas Minutello · <a href="https://github.com/lminutello/osu_pp_curve">How it works (GitHub)</a> · Not affiliated with osu! or ppy Pty Ltd.</p>
   </footer>
 </div>
@@ -665,7 +704,7 @@ function renderProj() {
   const rk = rankOf(k);
   $("proj-pp").innerHTML = `~${fmt(k)}<small> pp</small>`;
   $("proj-rank").innerHTML = `${rk.text} ${starPill(k)}`;
-  $("proj-rank-note").textContent = `rank on today's leaderboard (${rankNote()}) · typical star level`;
+  $("proj-rank-note").textContent = "rank on today's leaderboard";
   $("proj-meta").innerHTML = `<span>+${fmt(k - pp)} pp from now</span><span><i>range</i> ${fmt(l)}–${fmt(u)} pp</span><span><i>rank range</i> ${rankOf(u).text.replace("top ", "")}–${rankOf(l).text.replace("~", "")}</span>${Ht > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
   $("proj-val").innerHTML = `${dh(Ht)}<small>+${dh(Ht - H)} from now</small>`;
   const goal = MILESTONES.find(m => m > pp * 1.03);
@@ -681,7 +720,7 @@ function renderTrend() {
   $("trend-slider").value = Math.round((Math.log10(H) - tlo) / (thi - tlo) * 1000);
   $("trend-pp").innerHTML = `${fmt(m)}<small> pp</small>`;
   $("trend-rank").innerHTML = `${rk.text} ${starPill(m)}`;
-  $("trend-rank-note").textContent = `rank ${rankNote()} · typical star level`;
+  $("trend-rank-note").textContent = "";
   $("trend-meta").innerHTML = `<span><i>middle 68%</i> ${fmt(band(H, -1))}–${fmt(band(H, 1))}</span><span><i>middle 95%</i> ${fmt(band(H, -2))}–${fmt(band(H, 2))}</span>${realPPH(H) ? `<span><i>real players gained</i> <b style="color:#fff">~${fmt((realPPH(H)[0] + realPPH(H)[1]) / 2, 0)} pp/h</b> <i>(${fmt(realPPH(H)[0], 0)}–${fmt(realPPH(H)[1], 0)})</i></span>` : ""}<span><i>curve slope</i> ~${fmt(ppPerHour(H), 1)} pp/h</span><span><i>exponent</i> ${fmt(expo(H), 2)}</span>${H > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
   $("trend-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small>`;
 }
@@ -812,6 +851,39 @@ new ResizeObserver(() => { layout(); draw(); }).observe(cv);
 document.fonts?.ready.then(draw);
 
 state.you = [54, 2156];
+// ---------- is a data update running right now? (GitHub's public API, read-only, no key)
+const REPO = "lminutello/osu_pp_curve";
+const WORKFLOWS = {                       // file name -> row it updates and how long it usually takes
+  "refresh-model.yml": { rows: ["row-snap"], label: "Refresh model (monthly)", mins: "15–30" },
+  "refresh-histories.yml": { rows: ["row-hist", "row-snap"], label: "Pull more player histories (manual)", mins: "25+" },
+};
+let wasBusy = false, liveTimer = null;
+async function liveCheck() {
+  let runs = [];
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/actions/runs?per_page=10`, { headers: { Accept: "application/vnd.github+json" } });
+    if (!r.ok) return;                                   // rate-limited or offline: keep the date-based lights
+    runs = (await r.json()).workflow_runs || [];
+  } catch (_) { return; }
+  const active = runs.filter(x => x.status !== "completed" && WORKFLOWS[(x.path || "").split("/").pop()]);
+  for (const x of active) {
+    const w = WORKFLOWS[x.path.split("/").pop()];
+    for (const id of w.rows) {
+      const row = document.getElementById(id); if (!row) continue;
+      const dot = row.querySelector(".dot"), meta = row.querySelector(".meta");
+      dot.className = "dot busy"; row.title = `"${w.label}" is running (usually ${w.mins} min). The site keeps working; new numbers appear when it's done.`;
+      meta.className = "meta busy"; meta.textContent = "updating…";
+    }
+  }
+  const busy = active.length > 0;
+  if (wasBusy && !busy) {                                 // just finished: the new version deploys a minute or two later
+    const st = document.getElementById("status");
+    if (!st.querySelector(".ready")) st.querySelector("summary").insertAdjacentHTML("beforeend", '<span class="ready">Update done · <a href="">reload</a> in a minute</span>');
+  }
+  wasBusy = wasBusy || busy;
+  clearTimeout(liveTimer);
+  if (busy) liveTimer = setTimeout(liveCheck, 120000);    // re-check every 2 minutes while something runs
+}
 (() => {   // header status: dates come from the data file, so this updates itself on every refresh
   const nice = d => { const t = new Date(d.replace(/_/g, "-") + "T12:00:00Z"); return isNaN(t) ? d : t.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
   const dumps = (M.sources || []).filter(x => /^\d{4}_\d{2}_\d{2}$/.test(x)).sort();
@@ -819,10 +891,29 @@ state.you = [54, 2156];
   const builtLocal = builtAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const age = (Date.now() - builtAt) / 864e5;
   const st = document.getElementById("status");
-  st.innerHTML = `<span class="dot" style="${age > 45 ? "background:var(--gold);box-shadow:0 0 8px var(--gold)" : ""}"></span>
-    <span>Data updated <b class="${age > 45 ? "old" : ""}">${builtLocal}</b></span>
-    <span>${fmt(M.n)} players${dumps.length ? ` · newest dump <b>${nice(dumps[dumps.length - 1])}</b>` : ""}</span>
-    <span>${HIST.players ? `${fmt(HIST.players)} player histories` : "no player histories yet"}</span>`;
+  const total = M.allpp.length;
+  const span = dumps.length > 1 ? `the ${nice(dumps[0]).replace(/, \d{4}$/, "")} – ${nice(dumps[dumps.length - 1])} dumps` : dumps.length ? `the ${nice(dumps[0])} dump` : "the data dump";
+  const days = d => (Date.now() - new Date(d.replace(/_/g, "-") + "T12:00:00Z")) / 864e5;
+  // snapshot light: monthly job ran recently and the newest dump isn't ancient (dumps sometimes skip a month)
+  const dumpAge = dumps.length ? days(dumps[dumps.length - 1]) : 999;
+  const snapOk = age <= 40 && dumpAge <= 75;
+  const snapWhy = age > 40 ? "the monthly refresh hasn't run in over 40 days" : dumpAge > 75 ? "no new data dump in over 75 days" : "";
+  // histories light: manual pulls, so "fresh" is anything in the last ~6 months
+  const pulled = HIST.pulledAt || HIST.fitted;
+  const histAge = pulled ? days(pulled) : 999, histOk = histAge <= 183;
+  const hMonth = pulled ? nice(pulled) : "";
+  const short = d => nice(d).replace(/, \d{4}$/, "");
+  st.querySelector("summary").innerHTML = `
+    <span class="row" id="row-snap"><span class="dot ${snapOk ? "" : "old"}"></span><span class="tag">Snapshot</span>
+      <span class="meta ${snapOk ? "" : "old"}"><b>${fmt(total)}</b> players · ${dumps.length ? short(dumps[dumps.length - 1]) : builtLocal}${snapOk ? "" : " · stale"}</span>
+      <span class="more-hint" aria-hidden="true">▾</span></span>
+    ${HIST.players ? `<span class="row" id="row-hist"><span class="dot ${histOk ? "" : "old"}"></span><span class="tag h">Histories</span>
+      <span class="meta ${histOk ? "" : "old"}"><b>${fmt(HIST.players)}</b> players · ${pulled ? short(pulled) : ""}${histOk ? "" : " · due"}</span></span>` : ""}`;
+  st.insertAdjacentHTML("beforeend", `<div class="more">
+    <p><b>Snapshot:</b> ${fmt(total)} random ranked players from ${span}; ${fmt(M.n)} of them have play time logged. Used for the curve, "better than" and ranks. Refreshes monthly.${snapOk ? "" : ` <span style="color:var(--gold)">Stale: ${snapWhy}.</span>`}</p>
+    ${HIST.players ? `<p><b>Histories:</b> ${fmt(HIST.players)} players' progress over time, pulled from the osu! API${hMonth ? ` on ${hMonth}` : ""}. Used for the projection, star level and real pp per hour. Updated by hand.${histOk ? "" : ' <span style="color:var(--gold)">Over 6 months old.</span>'}</p>` : ""}
+    <p class="u">Site data rebuilt ${builtLocal}. Lights: green current, gold stale, blue updating now.</p></div>`);
+  liveCheck();
   st.title = dumps.length ? `Built from the data.ppy.sh dumps of ${dumps.map(nice).join(", ")}` : "";
 })();
 (() => {
