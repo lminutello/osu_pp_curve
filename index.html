@@ -227,6 +227,8 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .tile dt { font: 800 10.5px var(--f); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .tile dd { margin: 0; font: 900 22px/1.2 var(--f); font-variant-numeric: tabular-nums; color: #fff; }
 .tile dd.pink { color: var(--pink-hi); } .tile dd.blue { color: var(--blue); } .tile dd.gold { color: var(--gold); }
+.tile.ow { grid-column: 1 / -1; }
+.tile.ow dd { text-shadow: 0 0 18px currentColor; }
 .tile .note { color: var(--muted); font-size: 11.5px; font-weight: 600; line-height: 1.35; }
 .loading { margin: 0; color: var(--muted); font-weight: 800; font-size: 15px; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .45; } }
@@ -322,6 +324,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <details class="fold"><summary>How the numbers are made</summary>
     <p>Curve: ln(pp) fitted as a quadratic in ln(hours), so the growth exponent shrinks as play time goes up. σ is the spread of ln(pp) among players at that play time, measured locally. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
     <p>Ranks: the sample gives the share of ranked players above any pp; the leaderboard size and a correction for high pp come from <span data-f="ranksrc">real players' ranks</span>. Entering your own rank fine-tunes it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
+    <p>Overwatch equivalent: your share of osu! players you have more pp than, matched to the same spot on Blizzard's official Overwatch 2 rank distribution (July 2025, Season 17: Bronze 2.4%, Silver 12.6%, Gold 31.7%, Platinum 34.9%, Diamond 14.9%, Master 3.2%, Grandmaster 0.3%, Champion under 0.1%). It predates the Emerald tier added in August 2026, Blizzard doesn't publish divisions so they're split evenly within each tier, and the two ladders are different populations. Just for fun.</p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out.</p>
     <p>Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
     <p>Data: data.ppy.sh random_10000 dumps and the osu! API; players with under 1 hour logged are excluded from the curve. Hours = total_seconds_played. Past about <span data-f="thin">1,000</span> hours only 2% of players remain, so read that region loosely. The model rebuilds itself monthly; this version was built <span data-f="built">recently</span>.</p>
@@ -645,6 +648,23 @@ const grade = p => GRADES.find(([cut]) => p >= cut);
 const pill = (g, sm) => `<span class="pill ${sm ? "sm" : ""}" style="--g:${g[2]};--t:${g[3]}">${g[1]}</span>`;
 const gradeKey = cur => `<div class="key">${GRADES.map(g =>
   `<span class="${g[1] === cur ? "cur" : ""}">${pill(g, true)} ${g[0] ? `${g[0]}%+` : "<20%"}</span>`).join("")}</div>`;
+// Overwatch equivalent: same share of the ladder. Tier shares are Blizzard's official July 2025 (Season 17)
+// distribution; it predates the Emerald tier (Aug 2026), and divisions are split evenly within each tier.
+const OW_TIERS = [["Bronze", 2.4, "#c98a4b"], ["Silver", 12.6, "#c5ccd6"], ["Gold", 31.7, "#f2c94c"], ["Platinum", 34.9, "#7fd6d8"],
+  ["Diamond", 14.9, "#7aa7ff"], ["Master", 3.2, "#c59bff"], ["Grandmaster", 0.25, "#ff9b6a"], ["Champion", 0.05, "#ff6fc8"]];
+function owRank(pctAbove) {                        // pctAbove = % of players you're ahead of
+  let lo = 0; const p = Math.min(99.999, Math.max(0, pctAbove));
+  for (const [name, share, col] of OW_TIERS) {
+    if (p < lo + share || name === "Champion") {
+      const within = Math.min(0.999, (p - lo) / share);
+      return { name, div: 5 - Math.floor(within * 5), col, top: 100 - p };   // division 5 = bottom, 1 = top
+    }
+    lo += share;
+  }
+}
+const owTile = above => { const o = owRank(above);
+  return `<div class="tile ow"><dt>Overwatch equivalent</dt><dd style="color:${o.col}">${o.name} ${o.div}</dd>
+    <div class="note">same spot on the ladder: top ${o.top < 0.01 ? "<0.01" : o.top < 1 ? fmt(o.top, 2) : fmt(o.top, 0)}% · rough, for fun</div></div>`; };
 const stat = (label, value, note, cls = "") => `<div class="tile"><dt>${label}</dt><dd class="${cls}">${value}</dd>${note ? `<div class="note">${note}</div>` : ""}</div>`;
 function renderCompare() {
   const [H, pp] = state.you, r = compare(H, pp), pos = r.z >= 0;
@@ -668,6 +688,7 @@ function renderCompare() {
       ${stat("More pp than", `${fmt(above, 1)}%`, "of all ranked players")}
       ${rankTile}
       ${stat("Star level", starPill(pp, true), pp > 10000 ? "typical stars of top plays (extrapolated past 10k pp)" : "typical stars of top plays at your pp")}
+      ${owTile(above)}
     </dl>
     ${warn ? `<p class="warn">${warn}</p>` : ""}
     ${gradeKey(g)}`;
