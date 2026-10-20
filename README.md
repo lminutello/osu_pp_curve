@@ -16,13 +16,13 @@ Not affiliated with osu! or ppy Pty Ltd.
 
 | Piece | Source | Method |
 |---|---|---|
-| The curve, bands, percentiles | Newest 3 monthly `random_10000` dumps from [data.ppy.sh](https://data.ppy.sh) (~30,000 players) | ln(pp) fitted as a quadratic in ln(hours); spread measured locally (IQR/1.349 of residuals in 14 bins); percentiles count real players near your hours, weighted by distance |
-| Global rank | The same sample's pp distribution | Share of players above your pp × leaderboard size, calibrated on real ranks (the dumps' rank column, or players pulled from the API) with a correction at high pp |
+| The curve, bands, percentiles | Newest 3 monthly `random_10000` dumps from [data.ppy.sh](https://data.ppy.sh) (~30,000 players) | Real median and percentiles of players at each play time, smoothed around a quadratic in ln(hours); "better/faster than" count real players near you, weighted by distance. Re-checked on held-out players every rebuild |
+| Global rank, more pp than | ~2,000 real players' current (pp, rank), refreshed weekly, plus the real top 10,000 | Direct lookup of rank from pp (smoothed); within ~0.3% of real ranks on held-out players |
+| Overwatch equivalent | The sample's 10+ hour players (real ranks past 6,000 pp) | Same spot on Blizzard's published Overwatch rank distribution |
 | Star level | ~2,000 players' top plays from the osu! API | Median star rating of each player's top 10 plays without rate/difficulty mods, fitted as a curve in log space |
-| Projection | ~2,000 players' histories from the osu! API | Past pp rebuilt from dated top-100 scores, past hours from plays per month. Players' distance from the trend fades as they play; the speed is fitted under several rebuild choices and the site shows the middle with the full range |
-| Real pp per hour | Same histories | Median pp gained per hour of play by players near the median, at each stage |
+| Projection, real pp per hour | Players in the oldest dump still online (~6–7 months back) looked up again today; 2,000 more each month | Distance from the trend fades as players add play time (fitted on real pairs); the range is where the middle 68% of real players landed |
 
-Known limits: if osu! ships a big pp rework, the newest 3 dumps can briefly mix old and new pp values; run *Refresh model* with fewer dumps (`--count 1`) until three post-rework dumps exist. Also, rebuilding past pp from today's top 100 can't see scores a player later beat, so the drift speed and real pp/hour are less certain than everything else. Profiles' 90-day rank history is now saved on new pulls and is the planned fix.
+Known limits: if osu! ships a big pp rework, the newest 3 dumps can briefly mix old and new pp values; run *Refresh model* with fewer dumps (`--count 1`) until three post-rework dumps exist. The projection is measured over ~6–7 months (data.ppy.sh keeps about that much); longer projections are extrapolated, with a widening range.
 
 ## Repo layout
 
