@@ -1,0 +1,28 @@
+2026_08_01_performance_osu_random_10000/osu_beatmap_difficulty.sql	496668556
+  osu_beatmap_difficulty: beatmap_id, mode, mods, diff_unified, last_update
+2026_08_01_performance_osu_random_10000/osu_beatmap_difficulty_attribs.sql	4673262567
+  osu_beatmap_difficulty_attribs: beatmap_id, mode, mods, attrib_id, value
+2026_08_01_performance_osu_random_10000/osu_beatmap_failtimes.sql	141419614
+  osu_beatmap_failtimes: beatmap_id, type, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27, p28, p29, p30, p31, p32, p33, p34, p35, p36, p37, p38, p39, p40, p41, p42, p43, p44, p45, p46, p47, p48, p49, p50, p51, p52, p53, p54, p55, p56, p57, p58, p59, p60, p61, p62, p63, p64, p65, p66, p67, p68, p69, p70, p71, p72, p73, p74, p75, p76, p77, p78, p79, p80, p81, p82, p83, p84, p85, p86, p87, p88, p89, p90, p91, p92, p93, p94, p95, p96, p97, p98, p99, p100
+2026_08_01_performance_osu_random_10000/osu_beatmap_performance_blacklist.sql	2076
+  osu_beatmap_performance_blacklist: beatmap_id, mode
+2026_08_01_performance_osu_random_10000/osu_beatmaps.sql	56040425
+  osu_beatmaps: beatmap_id, beatmapset_id, user_id, filename, checksum, version, total_length, hit_length, countTotal, countNormal, countSlider, countSpinner, diff_drain, diff_size, diff_overall, diff_approach, playmode, approved, last_update, difficultyrating, max_combo, playcount, passcount, youtube_preview, score_version, osu_file_version, deleted_at, bpm, lazer_only
+2026_08_01_performance_osu_random_10000/osu_beatmapsets.sql	45721672
+  osu_beatmapsets: beatmapset_id, user_id, thread_id, artist, artist_unicode, title, title_unicode, creator, source, tags, video, storyboard, epilepsy, bpm, versions_available, approved, approvedby_id, approved_date, submit_date, last_update, filename, active, rating, offset, displaytitle, genre_id, language_id, star_priority, filesize, filesize_novideo, body_hash, header_hash, osz2_hash, download_disabled, download_disabled_url, thread_icon_date, favourite_count, play_count, difficulty_names, cover_updated_at, discussion_enabled, discussion_locked, deleted_at, hype, nominations, previous_queue_duration, queued_at, storyboard_hash, nsfw, anime_cover, track_id, spotlight, comment_locked, eligible_main_rulesets
+2026_08_01_performance_osu_random_10000/osu_counts.sql	2893
+  osu_counts: name, count
+2026_08_01_performance_osu_random_10000/osu_difficulty_attribs.sql	2726
+  osu_difficulty_attribs: attrib_id, name, visible
+2026_08_01_performance_osu_random_10000/osu_scores_high.sql	427787465
+  osu_scores_high: score_id, beatmap_id, user_id, score, maxcombo, rank, count50, count100, count300, countmiss, countgeki, countkatu, perfect, enabled_mods, date, pp, replay, hidden, country_acronym
+2026_08_01_performance_osu_random_10000/osu_user_beatmap_playcount.sql	143240472
+  osu_user_beatmap_playcount: user_id, beatmap_id, playcount
+2026_08_01_performance_osu_random_10000/osu_user_stats.sql	1878115
+  osu_user_stats: user_id, count300, count100, count50, countMiss, accuracy_total, accuracy_count, accuracy, playcount, ranked_score, total_score, x_rank_count, xh_rank_count, s_rank_count, sh_rank_count, a_rank_count, rank, level, replay_popularity, fail_count, exit_count, max_combo, country_acronym, rank_score, rank_score_index, accuracy_new, last_update, last_played, total_seconds_played
+    10,000 rows
+2026_08_01_performance_osu_random_10000/sample_users.sql	270486
+  sample_users: user_id, username, user_warnings, user_type
+    10,000 rows
+2026_08_01_performance_osu_random_10000/scores.sql	1329771649
+  scores: id, user_id, ruleset_id, beatmap_id, has_replay, preserve, ranked, rank, passed, accuracy, max_combo, total_score, data, pp, legacy_score_id, legacy_total_score, started_at, ended_at, unix_updated_at, build_id
