@@ -9,6 +9,9 @@ on:
       players:
         description: "How many players to pull (about 1 second each)"
         default: "3000"
+      then:
+        description: "Or: months back for an older dump whose players are all pulled (blank = off)"
+        default: ""
 
 permissions:
   contents: write
@@ -20,7 +23,7 @@ concurrency:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +39,11 @@ jobs:
           OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
           OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
         run: |
-          python scripts/audit_pull.py --players "${{ inputs.players }}"
+          if [ -n "${{ inputs.then }}" ]; then
+            python scripts/audit_pull.py --then "${{ inputs.then }}"
+          else
+            python scripts/audit_pull.py --players "${{ inputs.players }}"
+          fi
           cp data/leaderboard.json audit/ 2>/dev/null || true
 
       - name: Save to the audit branch
@@ -45,10 +52,13 @@ jobs:
           [ -d audit ] || exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mv audit /tmp/audit
-          git checkout --orphan audit-tmp
-          git rm -rfq . && rm -rf .cache
-          mv /tmp/audit audit
+          mv audit /tmp/audit && rm -rf .cache
+          if git fetch -q origin audit 2>/dev/null; then
+            git checkout -qf -B audit FETCH_HEAD          # add to what earlier audits saved
+          else
+            git checkout -q --orphan audit && git rm -rfq .
+          fi
+          mkdir -p audit && cp -r /tmp/audit/. audit/
           git add audit
           git commit -qm "Accuracy audit data ($(date -u +%Y-%m-%d))"
-          git push -f origin audit-tmp:audit
+          git push origin audit

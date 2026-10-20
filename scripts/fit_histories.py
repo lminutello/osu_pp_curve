@@ -43,6 +43,30 @@ def curve_from_model(path):
              [3.428, 0.404], [3.855, 0.409], [4.252, 0.374], [4.660, 0.361], [5.071, 0.344], [5.599, 0.308], [6.483, 0.277]])
 
 
+def z_function(model_path):
+    """z of (hours, pp) exactly as the site computes it: through the curve's real quantiles (z = -2..2 at the
+    2.3/15.9/50/84.1/97.7% points, linear past them); older model files fall back to the normal bands."""
+    fwd, sd_tab = curve_from_model(model_path)
+    fq = None
+    if os.path.exists(model_path):
+        with open(model_path) as f:
+            fq = json.load(f).get("fq")
+    if not fq:
+        fq = [[x, -2 * s, -s, 0, s, 2 * s] for x, s in sd_tab]
+    T = np.array(fq, float)
+
+    def z(h, p):
+        x, y = math.log(h), math.log(p)
+        b = fwd[0] + fwd[1] * x + fwd[2] * x * x
+        k = [b + float(np.interp(x, T[:, 0], T[:, j])) for j in range(1, 6)]
+        if y <= k[0]: return -2 + (y - k[0]) / (k[1] - k[0])
+        if y >= k[4]: return 2 + (y - k[4]) / (k[4] - k[3])
+        i = 0
+        while i < 3 and y > k[i + 1]: i += 1
+        return i - 2 + (y - k[i]) / (k[i + 1] - k[i])
+    return z
+
+
 def parse_date(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
 
@@ -87,9 +111,7 @@ def main():
     args = ap.parse_args()
 
     recs = load(args.history)
-    fwd, sd_tab = curve_from_model(args.model)
-    sdx, sdy = np.array([a for a, _ in sd_tab]), np.array([b for _, b in sd_tab])
-    zscore = lambda h, p: (math.log(p) - (fwd[0] + fwd[1] * math.log(h) + fwd[2] * math.log(h) ** 2)) / float(np.interp(math.log(h), sdx, sdy))
+    zscore = z_function(args.model)
     print(f"{len(recs):,} players")
 
     # ---- star level

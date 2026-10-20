@@ -8,7 +8,11 @@ Pull independent data for checking the site's accuracy (run by the "Accuracy aud
      covered too -> audit/validation.jsonl.gz (1 API request per player)
 
 Credentials from OSU_CLIENT_ID / OSU_CLIENT_SECRET.
+  or, with --then: every player of one older dump (e.g. 12 months back) -> audit/then_<date>.jsonl.gz, which gives
+     real before/after pairs for checking the projection
+
 Usage:  python scripts/audit_pull.py --players 3000
+        python scripts/audit_pull.py --then 12      # the dump closest to 12 months ago, all ~10,000 players
 """
 import argparse, csv, gzip, io, json, os, random, re, sys, tarfile, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
@@ -86,8 +90,21 @@ def main():
     ap.add_argument("--players", type=int, default=3000)
     ap.add_argument("--count", type=int, default=3)
     ap.add_argument("--cache", default=os.path.join(ROOT, ".cache"))
+    ap.add_argument("--then", type=float, help="pull every player of the dump closest to this many months ago")
     args = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
+
+    if args.then:
+        html = urllib.request.urlopen(urllib.request.Request("https://data.ppy.sh/", headers={"User-Agent": "osu-playtime-curve"}), timeout=60).read().decode()
+        dates = sorted(set(re.findall(r"(\d{4}_\d{2}_\d{2})_performance_osu_random_10000\.tar\.bz2", html)))
+        print("dumps available:", ", ".join(dates), flush=True)
+        now = datetime.now(timezone.utc)
+        age = lambda d: (now - datetime.strptime(d, "%Y_%m_%d").replace(tzinfo=timezone.utc)).days / 30.44
+        d = min(dates, key=lambda d: abs(age(d) - args.then))
+        print(f"using {d} ({age(d):.1f} months ago)", flush=True)
+        users = dump_tables(fetch(d, args.cache), d)
+        pull(sorted(users), os.path.join(OUT, f"then_{d}.jsonl.gz"))
+        return
 
     users = {}
     for d in sorted(latest_dumps(args.count)):
@@ -110,10 +127,13 @@ def main():
         pick += rng.sample(bins[b], min(per, len(bins[b])))
     rest = [u for u in users if u not in set(pick)]
     pick += rng.sample(rest, max(0, args.players - len(pick)))       # top up with plain random players
-    print(f"pulling {len(pick):,} players", flush=True)
 
+    pull(pick, os.path.join(OUT, "validation.jsonl.gz"))
+
+
+def pull(pick, path):
+    print(f"pulling {len(pick):,} players -> {path}", flush=True)
     api = Api()
-    path = os.path.join(OUT, "validation.jsonl.gz")
     with gzip.open(path, "wt") as f:
         for i, u in enumerate(pick):
             d = api.get(f"/users/{u}/osu?key=id")

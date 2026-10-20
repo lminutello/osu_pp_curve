@@ -126,6 +126,33 @@ def robust_sd_table(x, resid, bins=14):
     return out
 
 
+# quantiles of the residual at z = -2, -1, 0, +1, +2 of a normal: the middle 68.3% / 95.4% bands and the median
+QS = [0.02275, 0.15866, 0.5, 0.84134, 0.97725]
+
+
+def kernel_quantiles(x, resid, coef=None, bw=0.25, min_eff=300, step=0.1):
+    """Real quantiles of the residual around the quadratic, smoothed along x with Gaussian weights (bandwidth bw,
+    widened where data is thin). The quadratic is only the backbone: the site's median and bands come from these."""
+    grid = np.arange(x.min(), x.max() + step, step); out = []
+    for g in grid:
+        b = bw
+        while True:
+            w = np.exp(-0.5 * ((x - g) / b) ** 2)
+            if w.sum() ** 2 / (w * w).sum() >= min_eff or b > 3: break
+            b *= 1.25
+        o = np.argsort(resid); v, ww = resid[o], w[o]; c = (np.cumsum(ww) - 0.5 * ww) / ww.sum()
+        out.append([round(float(g), 3)] + [round(float(q), 4) for q in np.interp(QS, c, v)])
+    if coef is not None:
+        # the median must keep rising (more hours -> more pp and vice versa). It can dip where the 1-hour floor
+        # cuts the sample (the lowest pp levels); there, pull it down to the next level's value, bands with it
+        mid = [coef[0] + coef[1] * r[0] + coef[2] * r[0] ** 2 + r[3] for r in out]
+        for i in range(len(out) - 2, -1, -1):
+            if mid[i] >= mid[i + 1] - 1e-4:
+                d = mid[i + 1] - 1e-4 - mid[i]; mid[i] += d
+                out[i] = [out[i][0]] + [round(v + d, 4) for v in out[i][1:]]
+    return out
+
+
 def frac_above_fn(sorted_log_pp):
     L, n = sorted_log_pp, len(sorted_log_pp)
     def fa(pp):
@@ -240,8 +267,10 @@ def main():
         "n": int(len(H)),
         "fwd": [round(float(v), 7) for v in fwd],
         "fwdSd": robust_sd_table(lh, fwd_res),
+        "fq": kernel_quantiles(lh, fwd_res, fwd),
         "rev": [round(float(v), 7) for v in rev],
         "revSd": robust_sd_table(lp, rev_res),
+        "rq": kernel_quantiles(lp, rev_res, rev),
         "hMin": round(float(H.min()), 3), "hMax": round(float(H.max()), 1),
         "thin": round(float(np.percentile(H, 98)), 1),
         "pts": [[round(float(h), 2), round(float(p))] for h, p in zip(H, PP)],

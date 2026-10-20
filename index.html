@@ -345,18 +345,35 @@ PTS.forEach(([h, p], i) => { Hs[i] = h; PPs[i] = p; lnH[i] = Math.log(h); lnP[i]
 const poly = (b, x) => b[0] + b[1] * x + b[2] * x * x;
 const interp = (t, x) => { if (x <= t[0][0]) return t[0][1]; for (let i = 1; i < t.length; i++) if (x <= t[i][0]) {
   const [x0, y0] = t[i - 1], [x1, y1] = t[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return t[t.length - 1][1]; };
-const medPP = H => Math.exp(poly(P.fwd, Math.log(H)));
-const sdAt = H => interp(P.fwdSd, Math.log(H));
-const band = (H, z) => Math.exp(poly(P.fwd, Math.log(H)) + z * sdAt(H));
-const expo = H => P.fwd[1] + 2 * P.fwd[2] * Math.log(H);
+// median and bands = the real quantiles of players at each play time (smoothed, around a quadratic backbone),
+// so "middle 68%" holds 68% of real players at every play time. z ("std devs") is measured through those
+// quantiles: z = 0 is the median, ±1 and ±2 the edges of the middle 68.3% and 95.4%, linear past ±2.
+function qmodel(coef, tab) {
+  const cols = [1, 2, 3, 4, 5].map(j => tab.map(r => [r[0], r[j]]));
+  const knots = x => { const b = poly(coef, x); return cols.map(c => b + interp(c, x)); };
+  const at = (x, z) => { const k = knots(x);
+    if (z <= -2) return k[0] + (z + 2) * (k[1] - k[0]);
+    if (z >= 2) return k[4] + (z - 2) * (k[4] - k[3]);
+    const i = Math.min(3, Math.floor(z + 2)); return k[i] + (z + 2 - i) * (k[i + 1] - k[i]); };
+  const z = (x, y) => { const k = knots(x);
+    if (y <= k[0]) return -2 + (y - k[0]) / (k[1] - k[0]);
+    if (y >= k[4]) return 2 + (y - k[4]) / (k[4] - k[3]);
+    let i = 0; while (i < 3 && y > k[i + 1]) i++; return i - 2 + (y - k[i]) / (k[i + 1] - k[i]); };
+  return { at, z };
+}
+const sdTab = t => t.map(([x, s]) => [x, -2 * s, -s, 0, s, 2 * s]);     // older model files: normal bands
+const FQ = qmodel(P.fwd, P.fq || sdTab(P.fwdSd)), RQ = qmodel(P.rev, P.rq || sdTab(P.revSd));
+const medPP = H => Math.exp(FQ.at(Math.log(H), 0));
+const band = (H, z) => Math.exp(FQ.at(Math.log(H), z));
+const expo = H => (Math.log(medPP(H * 1.15)) - Math.log(medPP(H / 1.15))) / (2 * Math.log(1.15));   // local growth exponent
 const ppPerHour = H => medPP(H) * expo(H) / H;
-const revMu = lp => poly(P.rev, lp), revSd = lp => interp(P.revSd, lp);
+const medHoursAt = lp => Math.exp(RQ.at(lp, 0));
 
 // every player's position relative to the trend, standardized (Z: pp given hours; S: hours given pp)
 const Z = new Float64Array(N), S = new Float64Array(N);
 for (let i = 0; i < N; i++) {
-  Z[i] = (lnP[i] - poly(P.fwd, lnH[i])) / interp(P.fwdSd, lnH[i]);
-  S[i] = (lnH[i] - revMu(lnP[i])) / revSd(lnP[i]);
+  Z[i] = FQ.z(lnH[i], lnP[i]);
+  S[i] = RQ.z(lnP[i], lnH[i]);
 }
 // smooth percentile: Gaussian weights on distance in log units, so nobody drops in or out of a hard window
 const BW = 0.25;
@@ -367,14 +384,14 @@ function kernelPct(arr, center, hit) {
   return sw ? [100 * sh / sw, sw * sw / sw2] : [null, 0];
 }
 function compare(H, pp) {
-  const r = {}, x = Math.log(H), lp = Math.log(pp), mu = poly(P.fwd, x);
-  r.median = Math.exp(mu); r.z = (lp - mu) / sdAt(H); r.ratio = pp / r.median;
+  const r = {}, x = Math.log(H), lp = Math.log(pp);
+  r.median = medPP(H); r.z = FQ.z(x, lp); r.ratio = pp / r.median;
   [r.pct, r.nH] = kernelPct(lnH, x, i => Z[i] < r.z);
-  const s = (x - revMu(lp)) / revSd(lp); r.medHours = Math.exp(revMu(lp));
+  const s = RQ.z(lp, x); r.medHours = medHoursAt(lp);
   [r.faster, r.nP] = kernelPct(lnP, lp, i => S[i] > s);
   // too few real players nearby (far past the data): fall back to the fitted normal model
   if (r.pct == null || r.nH < 20) { r.pct = 100 * cdf(r.z); r.nH = 0; }
-  if (r.faster == null || r.nP < 20) { r.faster = 100 * cdf(s); r.nP = 0; }
+  if (r.faster == null || r.nP < 20) { r.faster = 100 * (1 - cdf(s)); r.nP = 0; }   // faster = fewer hours than you
   return r;
 }
 const erf = x => { const sg = Math.sign(x); x = Math.abs(x); const t = 1 / (1 + 0.3275911 * x);
@@ -511,8 +528,8 @@ const DOTS = M.scatter || Array.from({ length: N }, (_, i) => i);
 // the central value and the range below spans KAPPA 0.1-0.6 plus the real spread of outcomes (SPREAD per ln-hour).
 const DR = HIST.drift || { kappa: 0.3, lo: 0.1, hi: 0.6, spread: 0.45 };
 const KAPPA = DR.kappa, KAPPA_LO = DR.lo, KAPPA_HI = DR.hi, SPREAD = DR.spread;
-const zNow = (H, pp) => (Math.log(pp) - poly(P.fwd, Math.log(H))) / sdAt(H);
-const ppAtZ = (Hf, z) => Math.exp(poly(P.fwd, Math.log(Hf)) + z * sdAt(Hf));
+const zNow = (H, pp) => FQ.z(Math.log(H), Math.log(pp));
+const ppAtZ = (Hf, z) => band(Hf, z);
 function projAt(H, pp, Hf) {
   const z0 = Math.max(-Z_MAX, Math.min(Z_MAX, zNow(H, pp))), d = Math.max(0, Math.log(Hf / H));
   const z = z0 * Math.exp(-KAPPA * d);
