@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_model import fetch, kernel_quantiles, quad_fit, read_stats, z_of  # noqa: E402
+from build_model import archive_dump, fetch, kernel_quantiles, quad_fit, read_stats, z_of  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAIRS = os.path.join(ROOT, "data", "drift_pairs.jsonl.gz")
@@ -77,6 +77,7 @@ def cmd_pull(args):
     dump = dates[0]                                        # the oldest one still up: the longest real gap
     print(f"dumps available: {', '.join(dates)}; using {dump}", flush=True)
     stats, _ = read_stats(fetch(dump, args.cache))
+    archive_dump(dump, stats)
     curve = Curve([s["hours"] for s in stats.values()], [s["pp"] for s in stats.values()])
     recs = load_pairs(); done = {(r["dump"], r["id"]) for r in recs}
     pool = [u for u, s in stats.items() if s["hours"] >= 1 and s["pp"] > 0 and (dump, int(u)) not in done]

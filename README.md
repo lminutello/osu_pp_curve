@@ -31,6 +31,9 @@ index.html                         the whole site (loads data/model.json)
 data/model.json                    everything the page needs, rebuilt monthly
 data/history_fit.json              results from the player histories
 data/history.jsonl.gz              raw pulled histories (public profile data)
+data/dumps/                        every dump's player stats (data.ppy.sh only keeps ~6 months)
+data/drift_pairs.jsonl.gz          real before/after pairs for the projection (grows monthly)
+data/rank_pairs.json, leaderboard.json   latest real ranks (older versions in git history)
 scripts/build_model.py             dumps -> model.json
 scripts/fit_histories.py           histories -> history_fit.json
 scripts/pull_leaderboard.py        top 10,000 of the real leaderboard -> leaderboard.json (weekly + monthly)

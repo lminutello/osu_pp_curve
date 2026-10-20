@@ -97,8 +97,27 @@ def read_stats(path):
                 rank = int(float(r[ix[rank_col]])) if rank_col and r[ix[rank_col]] not in ("", "NULL") else 0
             except ValueError:
                 continue
-            out[r[ix["user_id"]]] = {"pp": pp, "hours": sec / 3600, "rank": rank}
+            out[r[ix["user_id"]]] = {"pp": pp, "hours": sec / 3600, "rank": rank,
+                                     "playcount": r[ix["playcount"]] if "playcount" in ix else "",
+                                     "last_played": r[ix["last_played"]] if "last_played" in ix else ""}
     return out, rank_col
+
+
+ARCHIVE = os.path.join(ROOT, "data", "dumps")
+
+
+def archive_dump(dump, stats):
+    """Keep each dump's player stats in the repo: data.ppy.sh only keeps about 6 months of dumps."""
+    path = os.path.join(ARCHIVE, f"{dump}.csv.gz")
+    if os.path.exists(path):
+        return
+    os.makedirs(ARCHIVE, exist_ok=True)
+    import gzip
+    with gzip.open(path, "wt", newline="") as f:
+        w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank", "playcount", "last_played"])
+        for u, p in stats.items():
+            w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"], p.get("playcount", ""), p.get("last_played", "")])
+    print(f"  archived {dump} -> data/dumps/{dump}.csv.gz")
 
 
 def from_users_csv(path):
@@ -227,6 +246,7 @@ def main():
         players = {}
         for d in sorted(dumps):                       # oldest first, so the newest row for a player wins
             stats, rc = read_stats(fetch(d, args.cache))
+            archive_dump(d, stats)
             rank_col = rank_col or rc
             print(f"  {d}: {len(stats):,} players{'' if rc else ' (no rank column)'}")
             players.update(stats)
