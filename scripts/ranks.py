@@ -84,6 +84,10 @@ def update_model(model_path=MODEL):
     with open(model_path) as f:
         m = json.load(f)
     tab = rank_table(rp["pairs"])
+    # held-out check: build the table from 4/5 of the players, look up the rest
+    P = np.array(rp["pairs"], float); idx = np.random.default_rng(0).permutation(len(P)); cut = len(P) // 5
+    T = np.array(rank_table(P[idx[cut:]].tolist())); te = P[idx[:cut]]
+    err = np.exp(np.abs(np.interp(np.log(te[:, 0]), T[:, 0], T[:, 1]) - np.log(te[:, 1]))) - 1
     rk = m.setdefault("rank", {})
     rk["table"] = tab
     rk["N"] = int(max(r for _, r in rp["pairs"]))          # the lowest-pp players sit at the bottom of the board
@@ -95,6 +99,8 @@ def update_model(model_path=MODEL):
         rk["top"] = [[round(math.log(pp), 5), r] for r, pp in sorted(L["pairs"], key=lambda x: x[1]) if pp > 0]
         rk["source"] += f" and the real top {L['pairs'][-1][0]:,} ({L['pulledAt']})"
     rk["pairsAt"] = rp["pulledAt"]
+    rk["check"] = {"median": round(float(np.median(err)) * 100, 2), "p90": round(float(np.percentile(err, 90)) * 100, 2), "n": int(cut)}
+    print(f"rank self-check on {cut} held-out players: median error {rk['check']['median']}%, 90% within {rk['check']['p90']}%")
     with open(model_path, "w") as f:
         json.dump(m, f, separators=(",", ":"))
     print(f"rank table: {len(tab)} points from {len(rp['pairs'])} players; leaderboard ~{rk['N']:,}")

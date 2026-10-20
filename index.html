@@ -325,6 +325,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <p>Curve: ln(pp) fitted as a quadratic in ln(hours), so the growth exponent shrinks as play time goes up. σ is the spread of ln(pp) among players at that play time, measured locally. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
     <p>Ranks: looked up from <span data-f="ranksrc">real players' current ranks</span>, refreshed weekly. Checked against 3,000 other real players, estimates land within about 0.3% of their real rank at every pp level. "More pp than" is the same number as a share of the leaderboard. Entering your own rank scales the other rank estimates to match it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
     <p>Overwatch equivalent: your share of osu! players with <span data-f="owh">10</span>+ hours (<span data-f="own">about half</span> of the sample) you have more pp than, matched to the same spot on Blizzard's official Overwatch 2 rank distribution (July 2025, Season 17: Bronze 2.4%, Silver 12.6%, Gold 31.7%, Platinum 34.9%, Diamond 14.9%, Master 3.2%, Grandmaster 0.3%, Champion under 0.1%). It predates the Emerald tier added in August 2026, Blizzard doesn't publish divisions so they're split evenly within each tier, and the two ladders are different populations. The hours floor is there because Overwatch's ladder only counts people who unlocked ranked and played it that season, while osu!'s includes every account that ever set a score, including many that played a few maps and quit. Just for fun.</p>
+    <p id="selfcheck" hidden></p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out.</p>
     <p>Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
     <p>Data: data.ppy.sh random_10000 dumps and the osu! API; players with under 1 hour logged are excluded from the curve. Hours = total_seconds_played. Past about <span data-f="thin">1,000</span> hours only 2% of players remain, so read that region loosely. The model rebuilds itself monthly; this version was built <span data-f="built">recently</span>.</p>
@@ -1002,6 +1003,14 @@ async function liveCheck() {
   if (HIST.players) fill("hist", fmt(HIST.players));
   if (HIST.stars) { fill("starsn", fmt(HIST.stars.n)); fill("starspread", Math.round((Math.exp(HIST.stars.spread || 0.08) - 1) * 100)); }
   if (HIST.drift) { fill("klo", fmt(HIST.drift.lo, 2)); fill("khi", fmt(HIST.drift.hi, 2)); }
+  // accuracy self-check, recomputed on every rebuild on players held out of the fit
+  const ck = M.check, rc = M.rank.check, sc = document.getElementById("selfcheck");
+  if (ck || rc) {
+    sc.innerHTML = "<b>Self-check</b>, rerun on every rebuild with players left out of the fit: " + [
+      ck && `the middle 68% band held ${ck.in68}% of them and the 95% band ${ck.in95}% (${ck.below}% fell below the median; every play-time bracket within ${ck.worstBin} percentage point${ck.worstBin === 1 ? "" : "s"})`,
+      rc && `rank estimates were off from real ranks by a median ${rc.median < 0.1 ? "under 0.1" : rc.median}% (90% within ${rc.p90}%, ${fmt(rc.n)} players)`].filter(Boolean).join("; ") + ".";
+    sc.hidden = false;
+  }
 })();
 layout();
 // ---------- "my stats": data/me.json is refreshed daily by the "Update my stats" workflow

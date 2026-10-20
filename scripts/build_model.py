@@ -153,6 +153,32 @@ def kernel_quantiles(x, resid, coef=None, bw=0.25, min_eff=300, step=0.1):
     return out
 
 
+def z_of(coef, tab, x, y):
+    """z through the quantile knots, exactly like the site (vectorized)."""
+    T = np.array(tab, float); b = coef[0] + coef[1] * x + coef[2] * x * x
+    K = np.stack([b + np.interp(x, T[:, 0], T[:, j]) for j in range(1, 6)], -1)
+    z = np.empty(len(x))
+    for i in range(len(x)):
+        k = K[i]
+        z[i] = (-2 + (y[i] - k[0]) / (k[1] - k[0]) if y[i] <= k[0] else 2 + (y[i] - k[4]) / (k[4] - k[3]) if y[i] >= k[4]
+                else float(np.interp(y[i], k, [-2, -1, 0, 1, 2])))
+    return z
+
+
+def self_check(x, y, folds=5):
+    """Held-out check of the median and bands: fit on 4/5 of players, test on the rest."""
+    fold = np.random.default_rng(0).integers(0, folds, len(x)); z = np.empty(len(x))
+    for k in range(folds):
+        tr, te = fold != k, fold == k
+        c = quad_fit(x[tr], y[tr]); tab = kernel_quantiles(x[tr], y[tr] - (c[0] + c[1] * x[tr] + c[2] * x[tr] ** 2), c)
+        z[te] = z_of(c, tab, x[te], y[te])
+    edges = np.quantile(x, np.linspace(0, 1, 9)); worst = 0.0
+    for a, b in zip(edges[:-1], edges[1:]):
+        m = (x >= a) & (x <= b); worst = max(worst, abs(np.mean(np.abs(z[m]) < 1) - 0.6827), abs(np.mean(z[m] < 0) - 0.5))
+    return {"in68": round(float(np.mean(np.abs(z) < 1)) * 100, 1), "in95": round(float(np.mean(np.abs(z) < 2)) * 100, 1),
+            "below": round(float(np.mean(z < 0)) * 100, 1), "worstBin": round(worst * 100, 1)}
+
+
 def frac_above_fn(sorted_log_pp):
     L, n = sorted_log_pp, len(sorted_log_pp)
     def fa(pp):
@@ -265,6 +291,9 @@ def main():
     rng = np.random.default_rng(0)
     keep = np.arange(len(H)) if len(H) <= 12000 else np.sort(rng.choice(len(H), 12000, replace=False))
 
+    check = self_check(lh, lp)
+    print(f"self-check (held-out): {check['in68']}% inside the 68% band, {check['in95']}% inside the 95% band, "
+          f"{check['below']}% below the median; worst play-time bracket off by {check['worstBin']} points")
     model = {
         "built": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "builtAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),   # exact time; the page shows it in the viewer's time zone
@@ -276,6 +305,7 @@ def main():
         "rev": [round(float(v), 7) for v in rev],
         "revSd": robust_sd_table(lp2, rev_res),
         "rq": kernel_quantiles(lp2, rev_res, rev),
+        "check": check,
         "pts0": [[round(float(h), 3), round(float(p), 1)] for h, p in zip(H0, PP0)],
         "hMin": round(float(H.min()), 3), "hMax": round(float(H.max()), 1),
         "thin": round(float(np.percentile(H, 98)), 1),
