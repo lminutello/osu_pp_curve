@@ -33,6 +33,7 @@ data/history_fit.json              results from the player histories
 data/history.jsonl.gz              raw pulled histories (public profile data)
 scripts/build_model.py             dumps -> model.json
 scripts/fit_histories.py           histories -> history_fit.json
+scripts/pull_leaderboard.py        top 10,000 of the real leaderboard -> leaderboard.json (monthly)
 scripts/pull_histories.py          osu! API -> history.jsonl.gz
 .github/workflows/refresh-model.yml       monthly, automatic
 .github/workflows/refresh-histories.yml   manual, needs API secrets

@@ -405,9 +405,20 @@ const rankCorr = pp => Math.exp(interp(RANK_CORR, Math.log(pp)));
 // Overwatch tile compares against sampled osu! players with OW_MIN_H+ hours, not every account. Rebuilt from each new dump.
 const OW_MIN_H = 10;
 const LOW = PTS.filter(([h]) => h >= OW_MIN_H).map(([, p]) => Math.log(p)).sort((a, b) => a - b);
-const owAbove = pp => 100 * (1 - Math.min(1, fracAboveIn(LOW, pp).f * rankCorr(pp)));   // % of them you're ahead of
-const shareAbove = pp => { const r = fracAbove(pp); return { f: r.f * rankCorr(pp), top: r.top }; };
+const owAbove = pp => { const t = topRank(pp);                 // % of them you're ahead of
+  if (t != null) return 100 * (1 - t / (N_DEFAULT * LOW.length / ALLPP.length));   // everyone up there has 10+ h
+  return 100 * (1 - Math.min(1, fracAboveIn(LOW, pp).f * rankCorr(pp))); };
+// the sample has almost nobody past ~10k pp, so up there ranks come straight from the real leaderboard's top 10,000
+// (pulled monthly): [ln pp, ln rank], pp strictly increasing
+const TOPL = [];
+for (const [x, r] of M.rank.top || []) if (!TOPL.length || x > TOPL[TOPL.length - 1][0]) TOPL.push([x, Math.log(r)]);
+const topRank = pp => { if (TOPL.length < 20) return null; const l = Math.log(pp);
+  return l < TOPL[0][0] ? null : l >= TOPL[TOPL.length - 1][0] ? 1 : Math.exp(interp(TOPL, l)); };
+const shareAbove = pp => { const t = topRank(pp); if (t != null) return { f: t / N_DEFAULT, top: t <= 1 };
+  const r = fracAbove(pp); return { f: r.f * rankCorr(pp), top: r.top }; };
 function rankOf(pp) {
+  const t = topRank(pp);
+  if (t != null) { const r = Math.max(1, Math.round(t)); return { r, top: false, text: r === 1 ? "#1" : `~#${fmt(sig3(r))}` }; }
   const { f, top } = shareAbove(pp), n = state.Ncal ?? N_DEFAULT, r = Math.max(1, Math.round(n * f));
   return { r, top, text: top ? `top ~#${fmt(sig3(r))}` : `~#${fmt(sig3(r))}` };
 }

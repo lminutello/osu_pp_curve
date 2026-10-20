@@ -219,6 +219,14 @@ def main():
         N, corr, err = calibrate_ranks(hist["rank_pairs"], fa); rank_src = f"{len(hist['rank_pairs']):,} players' ranks from the osu! API"
     else:
         N, corr, err, rank_src = 2985000, [], None, "default"
+    # the top of the real leaderboard (scripts/pull_leaderboard.py): exact ranks where the sample has almost nobody
+    top = []
+    lb_path = os.path.join(ROOT, "data", "leaderboard.json")
+    if os.path.exists(lb_path):
+        with open(lb_path) as f:
+            lb = json.load(f)
+        top = [[round(math.log(pp), 5), r] for r, pp in sorted(lb["pairs"], key=lambda x: x[1]) if pp > 0]
+        rank_src += f"; top {lb['pairs'][-1][0]:,} from the real leaderboard ({lb['pulledAt']})"
     print(f"ranks: leaderboard ~{N:,} players, from {rank_src}" + (f", median error after correction {err * 100:.1f}%" if err is not None else ""))
 
     # thin random subsample for the scatter so the page stays light (percentiles use everything)
@@ -239,7 +247,7 @@ def main():
         "pts": [[round(float(h), 2), round(float(p))] for h, p in zip(H, PP)],
         "scatter": keep.tolist() if len(keep) < len(H) else None,
         "allpp": [round(float(p), 1) for p in allpp],
-        "rank": {"N": N, "corr": corr, "source": rank_src},
+        "rank": {"N": N, "corr": corr, "source": rank_src, "top": top},
         "history": {k: v for k, v in hist.items() if k != "rank_pairs"},
     }
     os.makedirs(os.path.dirname(args.out), exist_ok=True)

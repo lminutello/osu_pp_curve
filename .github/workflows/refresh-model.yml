@@ -1,7 +1,8 @@
 name: Refresh model (monthly)
 
 # Rebuilds data/model.json from the newest osu! data dumps (data.ppy.sh publishes them about monthly)
-# and refits the saved player histories against the new curve. No API key needed.
+# and refits the saved player histories against the new curve. Also saves the top 10,000 of the real leaderboard
+# for exact ranks at high pp (needs the OSU_CLIENT_ID / OSU_CLIENT_SECRET secrets; skipped without them).
 on:
   schedule:
     - cron: "23 7 4 * *"      # 07:23 UTC on the 4th of every month
@@ -28,6 +29,12 @@ jobs:
       - name: Install numpy
         run: pip install "numpy>=1.26,<3"
 
+      - name: Pull the top of the real leaderboard
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+        run: python scripts/pull_leaderboard.py
+
       - name: Build from the newest dumps
         run: python scripts/build_model.py --write-users .cache/users.csv
 
@@ -41,7 +48,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/model.json data/history_fit.json
+          git add data/model.json data/history_fit.json data/leaderboard.json 2>/dev/null || git add data/model.json data/history_fit.json
           if git diff --cached --quiet; then
             echo "No changes."
           else
