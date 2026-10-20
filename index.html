@@ -397,7 +397,8 @@ function compare(H, pp) {
 const erf = x => { const sg = Math.sign(x); x = Math.abs(x); const t = 1 / (1 + 0.3275911 * x);
   return sg * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x)); };
 const cdf = z => 0.5 * (1 + erf(z / Math.SQRT2));
-const Z_MAX = 3.5;   // projections start from at most 3.5 sd off the trend: no tracked player was further out
+const Z_MAX = 3.5;   // no projection further than 3.5 sd off the trend: the drift was measured on players inside that
+const projOK = (H, pp) => H < H1 && Math.abs(zNow(H, pp)) <= Z_MAX;
 
 // ---------- ranks: share of all 10,000 sampled ranked players above a pp, times the leaderboard size
 const LALL = ALLPP.map(Math.log);
@@ -603,7 +604,7 @@ function draw() {
     labels.push([x, y, `${fmt(medPP(H))} pp @ ${dh(H)}`, C.gold, "#2a2108", "bl"]);
   }
   // projection (red line + range, white diamond target)
-  if (state.you && state.proj) {
+  if (state.you && state.proj && projOK(...state.you)) {
     const [H, pp] = state.you, Hmax = projMax(H), Ht = projTarget(H), n = 120;
     const pts = []; for (let i = 0; i <= n; i++) pts.push(H * (Hmax / H) ** (i / n));
     ctx.beginPath();
@@ -751,11 +752,11 @@ function renderProj() {
   if (!state.you) return;
   const [H0_, pp0_] = state.you, zz = zNow(H0_, pp0_);
   const box = $("proj-row"), note = box.querySelector(".proj-off");
-  if (H0_ >= H1 || Math.abs(zz) > 6) {
+  if (!projOK(H0_, pp0_)) {
     box.querySelectorAll(".box-head, .box-meta, input, .box-val, .hint").forEach(e => e.hidden = true);
     const n = note || Object.assign(document.createElement("p"), { className: "hint proj-off" });
     n.textContent = H0_ >= H1 ? "No projection: that's more play time than any player in the data, so there's nothing to base it on."
-      : "No projection: no real player is anywhere near this combination of hours and pp, so the drift measured from real players doesn't apply.";
+      : `No projection: this is ${zz > 0 ? "above" : "below"} ±${Z_MAX}σ for this play time, further out than the real players the projection was measured on.`;
     n.hidden = false; if (!note) box.appendChild(n);
     return;
   }
