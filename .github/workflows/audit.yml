@@ -1,0 +1,54 @@
+name: Accuracy audit (manual)
+
+# Pulls independent data for checking the site's numbers: every column of the newest dumps and current stats for
+# a fresh random sample of players (1 API request each, ~1 per second). Results go to the "audit" branch, not main,
+# so the site isn't touched.
+on:
+  workflow_dispatch:
+    inputs:
+      players:
+        description: "How many players to pull (about 1 second each)"
+        default: "3000"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install numpy
+        run: pip install "numpy>=1.26,<3"
+
+      - name: Pull dumps and players
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+        run: |
+          python scripts/audit_pull.py --players "${{ inputs.players }}"
+          cp data/leaderboard.json audit/ 2>/dev/null || true
+
+      - name: Save to the audit branch
+        if: always()
+        run: |
+          [ -d audit ] || exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mv audit /tmp/audit
+          git checkout --orphan audit-tmp
+          git rm -rfq . && rm -rf .cache
+          mv /tmp/audit audit
+          git add audit
+          git commit -qm "Accuracy audit data ($(date -u +%Y-%m-%d))"
+          git push -f origin audit-tmp:audit
