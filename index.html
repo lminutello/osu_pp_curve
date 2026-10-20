@@ -759,7 +759,7 @@ function owRank(pctAbove) {                        // pctAbove = % of players yo
 const owPill = pp => { const o = owRank(owAbove(pp)); return `<span class="owr" style="--oc:${o.col}" title="Overwatch equivalent">${o.name} ${o.div}</span>`; };
 const owTile = pp => { const o = owRank(owAbove(pp));
   return `<div class="tile ow"><dt>Overwatch equivalent</dt><dd style="color:${o.col}">${o.name} ${o.div}</dd>
-    <div class="note">top ${o.top < 0.01 ? "<0.01" : o.top < 1 ? fmt(o.top, 2) : fmt(o.top, 0)}% of osu! players with ${OW_MIN_H}+ hours, the same spot on Overwatch's ladder · rough, for fun</div></div>`; };
+    <div class="note">top ${o.top < 0.01 ? "<0.01" : o.top < 1 ? fmt(o.top, 2) : fmt(o.top, 0)}% of osu! players with ${OW_MIN_H}+ hours, the same spot on Overwatch's ladder · for fun</div></div>`; };
 const stat = (label, value, note, cls = "") => `<div class="tile"><dt>${label}</dt><dd class="${cls}">${value}</dd>${note ? `<div class="note">${note}</div>` : ""}</div>`;
 function renderCompare() {
   const [H, pp] = state.you, r = compare(H, pp), pos = r.z >= 0;
