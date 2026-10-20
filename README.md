@@ -5,7 +5,7 @@
 How does your osu! pp compare with everyone else who's played as long as you have? Enter your play time and pp (and optionally your global rank) to get:
 
 - **Better than** — the share of players with about your play time who have less pp than you, with an osu!-style rank letter
-- **Std devs, typical pp, faster than** — how far above or below the trend you are, and how many players at your pp took longer to get there
+- **Std devs, typical pp, more pp than** — how far above or below the trend you are, and your share of all ranked players and of players with 10+ hours
 - **Global rank and star level** — estimated from your pp, calibrated on real players
 - **Project my future** — where you're likely headed if you keep playing, with a realistic range and your next pp milestone
 - **Explore the trend** — the median player at any play time, and how fast real players actually improve there
@@ -16,7 +16,7 @@ Not affiliated with osu! or ppy Pty Ltd.
 
 | Piece | Source | Method |
 |---|---|---|
-| The curve, bands, percentiles | Newest 3 monthly `random_10000` dumps from [data.ppy.sh](https://data.ppy.sh) (~30,000 players) | Real median and percentiles of players at each play time, smoothed around a quadratic in ln(hours); "better/faster than" count real players near you, weighted by distance. Re-checked on held-out players every rebuild |
+| The curve, bands, percentiles | Newest 3 monthly `random_10000` dumps from [data.ppy.sh](https://data.ppy.sh) (~30,000 players) | Real median and percentiles of players at each play time, smoothed around a quadratic in ln(hours); "better than" counts real players near your play time, weighted by distance. Re-checked on held-out players every rebuild |
 | Global rank, more pp than | ~2,000 real players' current (pp, rank), refreshed weekly, plus the real top 10,000 | Direct lookup of rank from pp (smoothed); median error under 0.1% on held-out players (see the self-check on the page) |
 | Overwatch equivalent | The sample's 10+ hour players (real ranks past 6,000 pp) | Same spot on Blizzard's published Overwatch rank distribution |
 | Star level | ~2,000 players' top plays from the osu! API | Median star rating of each player's top 10 plays without rate/difficulty mods, fitted as a curve in log space |
