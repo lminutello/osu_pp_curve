@@ -370,16 +370,20 @@ const ppPerHour = H => medPP(H) * expo(H) / H;
 const medHoursAt = lp => Math.exp(RQ.at(lp, 0));
 
 // every player's position relative to the trend, standardized (Z: pp given hours; S: hours given pp)
-const Z = new Float64Array(N), S = new Float64Array(N);
+// hours given pp also counts players under 1 hour (M.pts0), so quick low-pp players aren't cut off
+const PTS0 = M.pts0 || [], N2 = N + PTS0.length;
+const lnH2 = new Float64Array(N2), lnP2 = new Float64Array(N2);
+lnH2.set(lnH); lnP2.set(lnP); PTS0.forEach(([h, p], i) => { lnH2[N + i] = Math.log(h); lnP2[N + i] = Math.log(p); });
+const Z = new Float64Array(N), S = new Float64Array(N2);
+for (let i = 0; i < N2; i++) S[i] = RQ.z(lnP2[i], lnH2[i]);
 for (let i = 0; i < N; i++) {
   Z[i] = FQ.z(lnH[i], lnP[i]);
-  S[i] = RQ.z(lnP[i], lnH[i]);
 }
 // smooth percentile: Gaussian weights on distance in log units, so nobody drops in or out of a hard window
 const BW = 0.25;
 function kernelPct(arr, center, hit) {
   let sw = 0, sw2 = 0, sh = 0;
-  for (let i = 0; i < N; i++) { const d = (arr[i] - center) / BW; if (d > 4 || d < -4) continue;
+  for (let i = 0; i < arr.length; i++) { const d = (arr[i] - center) / BW; if (d > 4 || d < -4) continue;
     const w = Math.exp(-0.5 * d * d); sw += w; sw2 += w * w; if (hit(i)) sh += w; }
   return sw ? [100 * sh / sw, sw * sw / sw2] : [null, 0];
 }
@@ -388,7 +392,7 @@ function compare(H, pp) {
   r.median = medPP(H); r.z = FQ.z(x, lp); r.ratio = pp / r.median;
   [r.pct, r.nH] = kernelPct(lnH, x, i => Z[i] < r.z);
   const s = RQ.z(lp, x); r.medHours = medHoursAt(lp);
-  [r.faster, r.nP] = kernelPct(lnP, lp, i => S[i] > s);
+  [r.faster, r.nP] = kernelPct(lnP2, lp, i => S[i] > s);
   // too few real players nearby (far past the data): fall back to the fitted normal model
   if (r.pct == null || r.nH < 20) { r.pct = 100 * cdf(r.z); r.nH = 0; }
   if (r.faster == null || r.nP < 20) { r.faster = 100 * (1 - cdf(s)); r.nP = 0; }   // faster = fewer hours than you
@@ -492,7 +496,8 @@ const $ = id => document.getElementById(id);
 const state = { log: true, you: null, estH: 100, proj: false, trend: false, projExtra: 150, rank: null, Ncal: null };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
-const dh = H => { const t = Math.round(H), d = Math.floor(t / 24), h = t % 24; return d ? `${fmt(d)}d ${h}h` : `${h}h`; };
+const dh = H => { if (H < 1) return `${Math.max(1, Math.round(H * 60))}m`;
+  const t = Math.round(H), d = Math.floor(t / 24), h = t % 24; return d ? `${fmt(d)}d ${h}h` : `${h}h`; };
 const H0 = Math.max(1, P.hMin), H1 = P.hMax;
 
 // ---------- chart

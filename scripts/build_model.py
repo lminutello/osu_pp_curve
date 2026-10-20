@@ -221,7 +221,12 @@ def main():
     H = np.array([h for h, _ in cur]); PP = np.array([p for _, p in cur]); lh, lp = np.log(H), np.log(PP)
 
     fwd = quad_fit(lh, lp); fwd_res = lp - (fwd[0] + fwd[1] * lh + fwd[2] * lh * lh)
-    rev = quad_fit(lp, lh); rev_res = lh - (rev[0] + rev[1] * lp + rev[2] * lp * lp)
+    # hours given pp ("faster than", "typical took") uses everyone with any play time: the curve's 1-hour floor
+    # would otherwise cut off the quick low-pp players and make the lowest pp levels look slow
+    under = [(p["hours"], p["pp"]) for p in players.values() if 0 < p["hours"] < 1 and p["pp"] > 0]
+    H0 = np.array([h for h, _ in under]); PP0 = np.array([p for _, p in under])
+    lh2, lp2 = np.log(np.concatenate([H, H0])), np.log(np.concatenate([PP, PP0]))
+    rev = quad_fit(lp2, lh2); rev_res = lh2 - (rev[0] + rev[1] * lp2 + rev[2] * lp2 * lp2)
 
     hist = {}
     if os.path.exists(args.history_fit):
@@ -269,8 +274,9 @@ def main():
         "fwdSd": robust_sd_table(lh, fwd_res),
         "fq": kernel_quantiles(lh, fwd_res, fwd),
         "rev": [round(float(v), 7) for v in rev],
-        "revSd": robust_sd_table(lp, rev_res),
-        "rq": kernel_quantiles(lp, rev_res, rev),
+        "revSd": robust_sd_table(lp2, rev_res),
+        "rq": kernel_quantiles(lp2, rev_res, rev),
+        "pts0": [[round(float(h), 3), round(float(p), 1)] for h, p in zip(H0, PP0)],
         "hMin": round(float(H.min()), 3), "hMax": round(float(H.max()), 1),
         "thin": round(float(np.percentile(H, 98)), 1),
         "pts": [[round(float(h), 2), round(float(p))] for h, p in zip(H, PP)],
