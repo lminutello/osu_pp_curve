@@ -535,7 +535,8 @@ function projAt(H, pp, Hf) {
   const z = z0 * Math.exp(-KAPPA * d);
   const kHalf = Math.abs(z0) * (Math.exp(-KAPPA_LO * d) - Math.exp(-KAPPA_HI * d)) / 2;
   const sd = Math.sqrt(SPREAD * d + kHalf * kHalf);
-  return [ppAtZ(Hf, z), ppAtZ(Hf, z - sd), ppAtZ(Hf, z + sd)];
+  // pp never goes down from playing more, so nothing is projected below what you have now
+  return [Math.max(pp, ppAtZ(Hf, z)), Math.max(pp, ppAtZ(Hf, z - sd)), Math.max(pp, ppAtZ(Hf, z + sd))];
 }
 const projKeep = (H, pp, Hf) => ppAtZ(Hf, zNow(H, pp));   // old assumption: keep your percentile forever
 // projection slider = extra hours from now, same scale for everyone: 0 to +1,000 h (about 42 days of play time),
@@ -716,7 +717,8 @@ function renderCompare() {
       <div class="headline-sub">of players with about your play time (${dh(H)}) have less pp than you <span style="color:var(--muted)">${r.nH ? `· ~${fmt(r.nH)} players, weighted by how close their hours are` : "· model estimate: almost no real players have this much play time"}</span></div>
     </div>
     <dl class="tiles">
-      ${stat("Std devs", `${pos ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ`, `${pos ? "above" : "below"} typical at ${fmt(H)} h`, "pink")}
+      ${Math.abs(r.z) > 4 ? stat("Std devs", `${pos ? ">+4" : "<−4"}σ`, "far outside every real player at this play time", "pink")
+        : stat("Std devs", `${pos ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ`, `${pos ? "above" : "below"} typical at ${fmt(H)} h`, "pink")}
       ${stat("Typical pp", fmt(r.median), `you have ${fmt(r.ratio, 2)}× that`)}
       ${stat("Faster than", `${fmt(r.faster, 1)}%`, r.nP ? `of players at your pp; typical took ${dh(r.medHours)}` : `model estimate; typical took ${dh(r.medHours)}`, "blue")}
       ${stat("More pp than", `${fmt(above, 1)}%`, "of all ranked players, any play time")}
