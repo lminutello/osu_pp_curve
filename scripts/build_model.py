@@ -162,13 +162,16 @@ def kernel_quantiles(x, resid, coef=None, bw=0.25, min_eff=300, step=0.1):
         o = np.argsort(resid); v, ww = resid[o], w[o]; c = (np.cumsum(ww) - 0.5 * ww) / ww.sum()
         out.append([round(float(g), 3)] + [round(float(q), 4) for q in np.interp(QS, c, v)])
     if coef is not None:
-        # the median must keep rising (more hours -> more pp and vice versa). It can dip where the 1-hour floor
-        # cuts the sample (the lowest pp levels); there, pull it down to the next level's value, bands with it
-        mid = [coef[0] + coef[1] * r[0] + coef[2] * r[0] ** 2 + r[3] for r in out]
-        for i in range(len(out) - 2, -1, -1):
-            if mid[i] >= mid[i + 1] - 1e-4:
-                d = mid[i + 1] - 1e-4 - mid[i]; mid[i] += d
-                out[i] = [out[i][0]] + [round(v + d, 4) for v in out[i][1:]]
+        # the median and every band edge must keep rising (more hours -> more pp and vice versa). They can dip where
+        # data is thin or cut off (the 1-hour floor, the far tails); there, pull the lower point down to the next one
+        base = [coef[0] + coef[1] * r[0] + coef[2] * r[0] ** 2 for r in out]
+        for j in range(1, 6):
+            for i in range(len(out) - 2, -1, -1):
+                lim = base[i + 1] + out[i + 1][j] - 1e-4
+                if base[i] + out[i][j] > lim:
+                    out[i][j] = round(lim - base[i], 4)
+        for r in out:                                  # keep the five edges in order at every point
+            r[1:] = sorted(r[1:])
     return out
 
 
