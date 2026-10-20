@@ -46,5 +46,6 @@ jobs:
             echo "No changes."
           else
             git commit -m "Monthly model refresh ($(date -u +%Y-%m-%d))"
+            git pull --rebase -q origin main
             git push
           fi

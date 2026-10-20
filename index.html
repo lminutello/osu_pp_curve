@@ -184,6 +184,10 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .fold > p { margin: 6px 0 0; line-height: 1.5; }
 .box .fold { grid-column: 1 / -1; }
 .controls .fold { flex-basis: 100%; }
+.me-btn { font: 800 12px var(--f); color: var(--pink-hi); background: rgba(255,102,170,.10); border: 1px solid rgba(255,102,170,.45);
+  border-radius: 999px; padding: 3px 11px; margin-left: 6px; cursor: pointer; vertical-align: 1px; }
+.me-btn:hover { background: rgba(255,102,170,.22); color: #fff; }
+.me-btn small { color: var(--muted); font-weight: 700; margin-left: 4px; }
 .sw.proj { width: 14px; height: 3px; background: var(--proj); }
 /* star pill, colored along the game's difficulty spectrum */
 .star { display: inline-flex; align-items: center; gap: 3px; padding: 1px 9px 1px 8px; border-radius: 999px; background: var(--sc);
@@ -276,7 +280,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="field"><label for="in-hours">Hours</label><input id="in-hours" inputmode="decimal" value="6"></div>
         <div class="field"><label for="in-pp">pp</label><input id="in-pp" class="pp" inputmode="decimal" value="2156"></div>
         <div class="field"><label for="in-rank">Global rank <small>(optional)</small></label><input id="in-rank" class="rank" inputmode="numeric" placeholder="optional"></div>
-        <p class="hint">From your osu! profile, or drag your dot on the chart.</p>
+        <p class="hint">From your osu! profile, or drag your dot on the chart. <button class="me-btn" id="me-btn" type="button" hidden></button></p>
         <details class="fold"><summary>More about these</summary><p>Days and hours come from Total Play Time (hours 0–24; minutes don't matter). Global rank is optional: adding it tunes every rank estimate on the page to you. Results update as you type. Example shown: sakul333.</p></details>
       </form>
 
@@ -926,7 +930,24 @@ async function liveCheck() {
   if (HIST.drift) { fill("klo", fmt(HIST.drift.lo, 2)); fill("khi", fmt(HIST.drift.hi, 2)); }
 })();
 layout();
-check(true);
+// ---------- "my stats": data/me.json is refreshed daily by the "Update my stats" workflow
+function fillMe(me) {
+  const h = Math.floor(me.hours);
+  inputs.Days.value = Math.floor(h / 24); inputs.Hours.value = h % 24;
+  inputs.pp.value = Math.round(me.pp); inputs.Rank.value = me.rank || "";
+}
+fetch("data/me.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(me => {
+  if (me && me.pp && me.hours >= 1) {
+    fillMe(me);                                       // open on the latest stats instead of a frozen example
+    const when = me.updatedAt ? new Date(me.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    const btn = $("me-btn");
+    btn.innerHTML = `↺ ${me.username}'s latest${when ? `<small>${when}</small>` : ""}`;
+    btn.title = `Fill in ${me.username}'s current stats (updated daily from the osu! API)`;
+    btn.hidden = false;
+    btn.onclick = () => { fillMe(me); check(true); };
+  }
+  check(true);
+});
 }).catch(err => {
   console.error(err);
   document.getElementById("card").innerHTML = '<p class="warn">Couldn\'t load the player data. Refresh the page to try again.</p>';
