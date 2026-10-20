@@ -1,7 +1,8 @@
 name: Refresh projection (monthly)
 
 # The projection is measured on real players: their stats in the oldest data dump still online (~6 months back) and
-# today. Each month this looks up 2,000 more of them (1 API request each, ~35 minutes), refits, and updates the site.
+# today. Each month this looks up 2,000 more of them (1 API request each, refits, and updates the site.
+# Estimated time: ~40 minutes (dump download + 2,000 players).
 on:
   schedule:
     - cron: "37 6 12 * *"     # 06:37 UTC on the 12th of every month

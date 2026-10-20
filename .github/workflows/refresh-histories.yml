@@ -5,6 +5,7 @@ name: Pull more player histories (manual)
 # Needs two repository secrets (Settings > Secrets and variables > Actions):
 #   OSU_CLIENT_ID      your OAuth app's client ID
 #   OSU_CLIENT_SECRET  your OAuth app's client secret
+# Estimated time: ~2 seconds per player plus ~10 minutes of setup (default plan: ~50 minutes).
 on:
   workflow_dispatch:
     inputs:

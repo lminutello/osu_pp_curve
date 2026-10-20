@@ -1,7 +1,8 @@
 name: Refresh ranks (weekly)
 
 # Ranks on the site are looked up from real players' current (pp, global rank). This re-pulls ~2,000 players spread
-# over every pp level (data/rank_ids.json) plus the real top 10,000, and updates data/model.json. ~40 minutes.
+# over every pp level (data/rank_ids.json) plus the real top 10,000, and updates data/model.json.
+# Estimated time: ~40 minutes (2,000 players at ~1 per second).
 on:
   schedule:
     - cron: "17 8 * * 1"      # Mondays, 08:17 UTC

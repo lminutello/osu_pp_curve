@@ -3,6 +3,7 @@ name: Update my stats
 # Saves sakul333's current pp, play time and rank to data/me.json for the site's "my stats" button.
 # One API request a day. Uses the same OSU_CLIENT_ID / OSU_CLIENT_SECRET secrets as the history pull,
 # and does nothing if they aren't set. Change the player with a repository variable named OSU_USERNAME.
+# Estimated time: under 1 minute.
 on:
   schedule:
     - cron: "41 9 * * *"      # daily, 09:41 UTC

@@ -3,6 +3,7 @@ name: Accuracy audit (manual)
 # Pulls independent data for checking the site's numbers: every column of the newest dumps and current stats for
 # a fresh random sample of players (1 API request each, ~1 per second). Results go to the "audit" branch, not main,
 # so the site isn't touched.
+# Estimated time: ~1 hour for 3,000 players; ~3 hours with "then" (a whole old dump, ~10,000 players).
 on:
   workflow_dispatch:
     inputs:

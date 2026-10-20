@@ -3,6 +3,7 @@ name: Refresh model (monthly)
 # Rebuilds data/model.json from the newest osu! data dumps (data.ppy.sh publishes them about monthly)
 # and refits the saved player histories against the new curve. Also saves the top 10,000 of the real leaderboard
 # for exact ranks at high pp (needs the OSU_CLIENT_ID / OSU_CLIENT_SECRET secrets; skipped without them).
+# Estimated time: ~10 minutes.
 on:
   schedule:
     - cron: "23 7 4 * *"      # 07:23 UTC on the 4th of every month
