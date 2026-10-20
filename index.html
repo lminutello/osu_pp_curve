@@ -966,8 +966,10 @@ async function liveCheck() {
   const days = d => (Date.now() - new Date(d.replace(/_/g, "-") + "T12:00:00Z")) / 864e5;
   // snapshot light: monthly job ran recently and the newest dump isn't ancient (dumps sometimes skip a month)
   const dumpAge = dumps.length ? days(dumps[dumps.length - 1]) : 999;
-  const snapOk = age <= 40 && dumpAge <= 75;
-  const snapWhy = age > 40 ? "the monthly refresh hasn't run in over 40 days" : dumpAge > 75 ? "no new data dump in over 75 days" : "";
+  const rankAge = M.rank.pairsAt ? days(M.rank.pairsAt) : 0;
+  const snapOk = age <= 40 && dumpAge <= 75 && rankAge <= 15;
+  const snapWhy = age > 40 ? "the monthly refresh hasn't run in over 40 days" : dumpAge > 75 ? "no new data dump in over 75 days"
+    : rankAge > 15 ? "ranks haven't refreshed in over 2 weeks" : "";
   // histories light: manual pulls, so "fresh" is anything in the last ~6 months
   const pulled = HIST.pulledAt || HIST.fitted;
   const histAge = pulled ? days(pulled) : 999, histOk = histAge <= 183;
@@ -980,7 +982,8 @@ async function liveCheck() {
     ${HIST.players ? `<span class="row" id="row-hist"><span class="dot ${histOk ? "" : "old"}"></span><span class="tag h">Histories</span>
       <span class="meta ${histOk ? "" : "old"}"><b>${fmt(HIST.players)}</b> players · ${pulled ? short(pulled) : ""}${histOk ? "" : " · due"}</span></span>` : ""}`;
   st.insertAdjacentHTML("beforeend", `<div class="more">
-    <p><b>Snapshot:</b> ${fmt(total)} random ranked players from ${span}; ${fmt(M.n)} of them have play time logged. Used for the curve, "better than" and ranks. Refreshes monthly.${snapOk ? "" : ` <span style="color:var(--gold)">Stale: ${snapWhy}.</span>`}</p>
+    <p><b>Snapshot:</b> ${fmt(total)} random ranked players from ${span}; ${fmt(M.n)} of them have play time logged. Used for the curve, "better than", "faster than" and the Overwatch equivalent. Refreshes monthly.${snapOk ? "" : ` <span style="color:var(--gold)">Stale: ${snapWhy}.</span>`}</p>
+    ${M.rank.pairsAt ? `<p><b>Ranks:</b> looked up from ${M.rank.source}. Refreshes weekly.</p>` : ""}
     ${HIST.players ? `<p><b>Histories:</b> ${fmt(HIST.players)} players' progress over time, pulled from the osu! API${hMonth ? ` on ${hMonth}` : ""}. Used for the projection, star level and real pp per hour. Updated by hand.${histOk ? "" : ' <span style="color:var(--gold)">Over 6 months old.</span>'}</p>` : ""}
     <p class="u">Site data rebuilt ${builtLocal}. Lights: green current, gold stale, blue updating now.</p></div>`);
   liveCheck();
