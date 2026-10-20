@@ -203,9 +203,19 @@ def main():
 
     fa = frac_above_fn(np.log(allpp))
     dump_pairs = [(p["pp"], p["rank"]) for p in players.values() if p["rank"] > 0 and p["pp"] > 0]
+    api_pairs = hist.get("rank_pairs", [])
     if len(dump_pairs) >= 500:
+        # the dumps give the high-pp correction from lots of players, but each rank is from that dump's date.
+        # The leaderboard keeps growing, so take its size from whichever source is newer.
         N, corr, err = calibrate_ranks(dump_pairs, fa); rank_src = f"{len(dump_pairs):,} players' ranks in the dumps"
-    elif len(hist.get("rank_pairs", [])) >= 200:
+        newest_dump = max((s for s in sources if re.fullmatch(r"\d{4}_\d{2}_\d{2}", s)), default="")
+        pulled = (hist.get("pulledAt") or "").replace("-", "_")
+        if len(api_pairs) >= 200 and pulled > newest_dump:
+            K = np.array(corr) if corr else None
+            c = (lambda p: math.exp(np.interp(math.log(p), K[:, 0], K[:, 1]))) if K is not None else (lambda p: 1.0)
+            N = round(float(np.median([r / (fa(p) * c(p)) for p, r in api_pairs])))
+            rank_src += f", sized to {len(api_pairs):,} players' current ranks from the osu! API ({hist['pulledAt']})"
+    elif len(api_pairs) >= 200:
         N, corr, err = calibrate_ranks(hist["rank_pairs"], fa); rank_src = f"{len(hist['rank_pairs']):,} players' ranks from the osu! API"
     else:
         N, corr, err, rank_src = 2985000, [], None, "default"
