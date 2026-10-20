@@ -315,6 +315,15 @@ def main():
         "rank": {"N": N, "corr": corr, "source": rank_src, "top": top},
         "history": {k: v for k, v in hist.items() if k != "rank_pairs"},
     }
+    # real before/after pairs (scripts/drift.py) beat the rebuilt histories for drift, its range and pp/hour
+    dpath = os.path.join(ROOT, "data", "drift_fit.json")
+    if os.path.exists(dpath):
+        with open(dpath) as f:
+            dr = json.load(f)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import drift
+        drift.merge_into(model, dr)
+        print(f"drift from {dr['n']:,} real before/after pairs: kappa {dr['kappa']} ({dr['lo']}-{dr['hi']})")
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(model, f, separators=(",", ":"))

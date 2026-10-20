@@ -35,11 +35,13 @@ scripts/build_model.py             dumps -> model.json
 scripts/fit_histories.py           histories -> history_fit.json
 scripts/pull_leaderboard.py        top 10,000 of the real leaderboard -> leaderboard.json (weekly + monthly)
 scripts/ranks.py                   ~1,000 real players' current ranks -> rank lookup in model.json (weekly)
+scripts/drift.py                   real before/after pairs (oldest dump vs today) -> projection fit (monthly)
 scripts/audit_pull.py              independent check data -> the `audit` branch (manual)
 scripts/pull_histories.py          osu! API -> history.jsonl.gz
 .github/workflows/refresh-model.yml       monthly, automatic
 .github/workflows/refresh-histories.yml   manual, needs API secrets
 .github/workflows/refresh-ranks.yml       weekly, needs API secrets
+.github/workflows/refresh-drift.yml       monthly, needs API secrets
 .github/workflows/update-me.yml           daily, needs API secrets
 .github/workflows/audit.yml               manual accuracy audit, needs API secrets
 ```

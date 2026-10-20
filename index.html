@@ -300,7 +300,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="box-meta" id="proj-meta"></div>
         <input type="range" id="proj-slider" min="0" max="1000" step="1" value="726" aria-label="Extra hours of play from now">
         <div class="box-val" id="proj-val"></div>
-        <details class="fold"><summary>How this projection works</summary><p>From <span data-f="hist">thousands of</span> real players' histories: players ahead of the trend drift back toward it as they play, and players behind it catch up. That direction held up in every check; the exact speed didn't, so the red line uses a middle value and the shaded red is wide on purpose. It covers both the uncertain speed and how much real players starting where you are spread out. Faint dotted line: if you kept your exact percentile forever.</p></details>
+        <details class="fold"><summary>How this projection works</summary><p id="proj-how">From <span data-f="hist">thousands of</span> real players' histories: players ahead of the trend drift back toward it as they play, and players behind it catch up. The shaded red covers both the uncertain speed and how much real players starting where you are spread out. Faint dotted line: if you kept your exact percentile forever.</p></details>
       </div>
 
       <div class="box gold" id="trend-row" hidden>
@@ -312,7 +312,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="box-meta" id="trend-meta"></div>
         <input type="range" id="trend-slider" min="0" max="1000" step="1" value="0" aria-label="Hours played for the trend point">
         <div class="box-val" id="trend-val"></div>
-        <details class="fold"><summary>What these numbers mean</summary><p>Yellow dot: the median player at that play time, with the middle 68% of players as the yellow bar. "Real players gained" is how fast players near the median actually improved at this stage, from <span data-f="hist">thousands of</span> tracked histories. <span data-f="pphx">It runs above the curve's slope at higher play times</span>, because the snapshot curve also counts people who stopped playing.</p></details>
+        <details class="fold"><summary>What these numbers mean</summary><p>Yellow dot: the median player at that play time, with the middle 68% of players as the yellow bar. "Real players gained" is how fast players near the median actually improved at this stage: <span data-f="pphsrc">measured from tracked players' histories</span>, with its range in brackets. It's often below the curve's slope, which compares different players rather than following the same ones.</p></details>
       </div>
     </section>
 
@@ -539,13 +539,31 @@ const DR = HIST.drift || { kappa: 0.3, lo: 0.1, hi: 0.6, spread: 0.45 };
 const KAPPA = DR.kappa, KAPPA_LO = DR.lo, KAPPA_HI = DR.hi, SPREAD = DR.spread;
 const zNow = (H, pp) => FQ.z(Math.log(H), Math.log(pp));
 const ppAtZ = (Hf, z) => band(Hf, z);
+// range from real outcomes (DR.band, when the model has real before/after pairs): the 16th-84th percentile of where
+// real players landed relative to the centre, in z units, by play time (lh) and by how much play time was added (ld).
+// Past the longest measured gap it widens like a random walk (with the square root of the added play time).
+function bandAt(lh, d) {
+  const B = DR.band, ld = Math.log(Math.max(d, 1e-9)), D0 = Math.exp(B.ld[0]), DN = Math.exp(B.ld[B.ld.length - 1]);
+  const clampIx = (g, v) => { if (v <= g[0]) return [0, 0, 0]; if (v >= g[g.length - 1]) return [g.length - 1, g.length - 1, 0];
+    let i = 0; while (v > g[i + 1]) i++; return [i, i + 1, (v - g[i]) / (g[i + 1] - g[i])]; };
+  const [a0, a1, ta] = clampIx(B.lh, lh), [b0, b1, tb] = clampIx(B.ld, ld);
+  const bil = T => { const r0 = T[a0][b0] + (T[a0][b1] - T[a0][b0]) * tb, r1 = T[a1][b0] + (T[a1][b1] - T[a1][b0]) * tb; return r0 + (r1 - r0) * ta; };
+  const f = d < D0 ? d / D0 : d > DN ? Math.sqrt(d / DN) : 1;
+  return [bil(B.q16) * f, bil(B.q84) * f];
+}
 function projAt(H, pp, Hf) {
   const z0 = Math.max(-Z_MAX, Math.min(Z_MAX, zNow(H, pp))), d = Math.max(0, Math.log(Hf / H));
   const z = z0 * Math.exp(-KAPPA * d);
-  const kHalf = Math.abs(z0) * (Math.exp(-KAPPA_LO * d) - Math.exp(-KAPPA_HI * d)) / 2;
-  const sd = Math.sqrt(SPREAD * d + kHalf * kHalf);
-  // pp never goes down from playing more, so nothing is projected below what you have now
-  return [Math.max(pp, ppAtZ(Hf, z)), Math.max(pp, ppAtZ(Hf, z - sd)), Math.max(pp, ppAtZ(Hf, z + sd))];
+  let zl, zh;
+  if (DR.band) { const [q16, q84] = bandAt(Math.log(H), d); zl = z + q16; zh = z + q84; }
+  else {
+    const kHalf = Math.abs(z0) * (Math.exp(-KAPPA_LO * d) - Math.exp(-KAPPA_HI * d)) / 2;
+    const sd = Math.sqrt(SPREAD * d + kHalf * kHalf); zl = z - sd; zh = z + sd;
+  }
+  // the line and the top of the range never go below what you have now. The bottom of the range can: in the real-player
+  // test about 1 in 5 players who kept playing still lost some pp (pp reworks and recalculations), and leaving that out
+  // made the range miss too often
+  return [Math.max(pp, ppAtZ(Hf, z)), DR.band ? ppAtZ(Hf, zl) : Math.max(pp, ppAtZ(Hf, zl)), Math.max(pp, ppAtZ(Hf, zh))];
 }
 const projKeep = (H, pp, Hf) => ppAtZ(Hf, zNow(H, pp));   // old assumption: keep your percentile forever
 // projection slider = extra hours from now, same scale for everyone: 0 to +1,000 h (about 42 days of play time),
@@ -743,10 +761,11 @@ function renderCompare() {
 // real pp gained per hour by players near the median, from 6-month windows of 2,183 histories.
 // [hours, low, high]: the two sensible ways of handling bonus pp; the page shows the middle with this range
 const REAL_PPH = HIST.pph || [];
-function realPPH(H) {
-  if (REAL_PPH.length < 2 || H < 5 || H > 1500) return null;
-  const lo = interp(REAL_PPH.map(r => [Math.log(r[0]), r[1]]), Math.log(H)), hi = interp(REAL_PPH.map(r => [Math.log(r[0]), r[2]]), Math.log(H));
-  return [lo, hi];
+function realPPH(H) {                               // [low, high, middle] pp per hour, or null outside the measured range
+  if (REAL_PPH.length < 2 || H < REAL_PPH[0][0] * 0.8 || H > REAL_PPH[REAL_PPH.length - 1][0] * 1.6) return null;
+  const col = j => interp(REAL_PPH.map(r => [Math.log(r[0]), r[j]]), Math.log(H));
+  const lo = col(1), hi = col(2);
+  return [lo, hi, REAL_PPH[0].length > 3 ? col(3) : (lo + hi) / 2];
 }
 // hours until the projection (and its range) first reaches a target pp; null if not within the projection window
 function hoursTo(H, pp, target, which) {
@@ -791,7 +810,7 @@ function renderTrend() {
   $("trend-pp").innerHTML = `${fmt(m)}<small> pp</small>`;
   $("trend-rank").innerHTML = `${rk.text} ${starPill(m)}`;
   $("trend-rank-note").textContent = "";
-  $("trend-meta").innerHTML = `<span><i>middle 68%</i> ${fmt(band(H, -1))}–${fmt(band(H, 1))}</span><span><i>middle 95%</i> ${fmt(band(H, -2))}–${fmt(band(H, 2))}</span>${realPPH(H) ? `<span><i>real players gained</i> <b style="color:#fff">~${fmt((realPPH(H)[0] + realPPH(H)[1]) / 2, 0)} pp/h</b> <i>(${fmt(realPPH(H)[0], 0)}–${fmt(realPPH(H)[1], 0)})</i></span>` : ""}<span><i>curve slope</i> ~${fmt(ppPerHour(H), 1)} pp/h</span><span><i>exponent</i> ${fmt(expo(H), 2)}</span>${H > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
+  $("trend-meta").innerHTML = `<span><i>middle 68%</i> ${fmt(band(H, -1))}–${fmt(band(H, 1))}</span><span><i>middle 95%</i> ${fmt(band(H, -2))}–${fmt(band(H, 2))}</span>${realPPH(H) ? `<span><i>real players gained</i> <b style="color:#fff">~${fmt(realPPH(H)[2], 0)} pp/h</b> <i>(${fmt(realPPH(H)[0], 0)}–${fmt(realPPH(H)[1], 0)})</i></span>` : ""}<span><i>curve slope</i> ~${fmt(ppPerHour(H), 1)} pp/h</span><span><i>exponent</i> ${fmt(expo(H), 2)}</span>${H > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
   $("trend-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small>`;
 }
 const renderAll = () => { renderCompare(); renderProj(); renderTrend(); };
@@ -927,6 +946,7 @@ const WORKFLOWS = {                       // file name -> row it updates and how
   "refresh-model.yml": { rows: ["row-snap"], label: "Refresh model (monthly)", mins: "15–30" },
   "refresh-histories.yml": { rows: ["row-hist", "row-snap"], label: "Pull more player histories (manual)", mins: "25+" },
   "refresh-ranks.yml": { rows: ["row-snap"], label: "Refresh ranks (weekly)", mins: "~20" },
+  "refresh-drift.yml": { rows: ["row-snap"], label: "Refresh projection (monthly)", mins: "~40" },
 };
 let wasBusy = false, liveTimer = null;
 async function liveCheck() {
@@ -968,9 +988,10 @@ async function liveCheck() {
   // snapshot light: monthly job ran recently and the newest dump isn't ancient (dumps sometimes skip a month)
   const dumpAge = dumps.length ? days(dumps[dumps.length - 1]) : 999;
   const rankAge = M.rank.pairsAt ? days(M.rank.pairsAt) : 0;
-  const snapOk = age <= 40 && dumpAge <= 75 && rankAge <= 15;
+  const driftAge = DR.real && DR.pulledAt ? days(DR.pulledAt) : 0;
+  const snapOk = age <= 40 && dumpAge <= 75 && rankAge <= 15 && driftAge <= 45;
   const snapWhy = age > 40 ? "the monthly refresh hasn't run in over 40 days" : dumpAge > 75 ? "no new data dump in over 75 days"
-    : rankAge > 15 ? "ranks haven't refreshed in over 2 weeks" : "";
+    : rankAge > 15 ? "ranks haven't refreshed in over 2 weeks" : driftAge > 45 ? "the projection data hasn't refreshed in over 45 days" : "";
   // histories light: manual pulls, so "fresh" is anything in the last ~6 months
   const pulled = HIST.pulledAt || HIST.fitted;
   const histAge = pulled ? days(pulled) : 999, histOk = histAge <= 183;
@@ -985,7 +1006,8 @@ async function liveCheck() {
   st.insertAdjacentHTML("beforeend", `<div class="more">
     <p><b>Snapshot:</b> ${fmt(total)} random ranked players from ${span}; ${fmt(M.n)} of them have play time logged. Used for the curve, "better than", "faster than" and the Overwatch equivalent. Refreshes monthly.${snapOk ? "" : ` <span style="color:var(--gold)">Stale: ${snapWhy}.</span>`}</p>
     ${M.rank.pairsAt ? `<p><b>Ranks:</b> looked up from ${M.rank.source}. Refreshes weekly.</p>` : ""}
-    ${HIST.players ? `<p><b>Histories:</b> ${fmt(HIST.players)} players' progress over time, pulled from the osu! API${hMonth ? ` on ${hMonth}` : ""}. Used for the projection, star level and real pp per hour. Updated by hand.${histOk ? "" : ' <span style="color:var(--gold)">Over 6 months old.</span>'}</p>` : ""}
+    ${DR.real ? `<p><b>Projection:</b> measured on ${fmt(DR.n)} real players' pp and play time about ${Math.round(DR.gapDays / 30.4)} months apart (last looked up ${nice(DR.pulledAt)}). Also used for real pp per hour. Refreshes monthly.</p>` : ""}
+    ${HIST.players ? `<p><b>Histories:</b> ${fmt(HIST.players)} players' progress over time, pulled from the osu! API${hMonth ? ` on ${hMonth}` : ""}. Used for star level${DR.real ? "" : ", the projection and real pp per hour"}. Updated by hand.${histOk ? "" : ' <span style="color:var(--gold)">Over 6 months old.</span>'}</p>` : ""}
     <p class="u">Site data rebuilt ${builtLocal}. Lights: green current, gold stale, blue updating now.</p></div>`);
   liveCheck();
   st.title = dumps.length ? `Built from the data.ppy.sh dumps of ${dumps.map(nice).join(", ")}` : "";
@@ -996,10 +1018,15 @@ async function liveCheck() {
   fill("sources", M.sources && M.sources[0] && /^\d{4}_/.test(M.sources[0]) ? ` (${M.sources.map(s => s.replace(/_/g, "-")).join(", ")})` : "");
   fill("ranksrc", M.rank.source || "real players' ranks");
   fill("owh", OW_MIN_H); fill("own", `${fmt(LOW.length)} of ${fmt(ALLPP.length)} players`);
-  // where real players' pp/hour first beats the snapshot curve's slope (moves with each refresh)
-  for (let H = 5; H <= 1500; H *= 1.05) { const r = realPPH(H);
-    if (r && (r[0] + r[1]) / 2 > ppPerHour(H)) { fill("pphx", `It runs above the curve's slope past ~${fmt(sig3(H))} hours`); break; }
-    if (H * 1.05 > 1500) fill("pphx", "It can differ from the curve's slope"); }
+  if (DR.real) {
+    const months = Math.round(DR.gapDays / 30.4);
+    fill("pphsrc", `measured on ${fmt(DR.n)} real players' pp and play time about ${months} months apart`);
+    document.getElementById("proj-how").textContent = `Tested on ${fmt(DR.n)} real players: their pp and play time in an official data dump about ${months} months ago, and again today. ` +
+      `Players ahead of the trend drift back toward it as they play, and players behind it catch up (the red line; tested on players left out of the fit, its middle landed within 1% of their real middle overall, and within about 5% for every play-time group). ` +
+      `The shaded red is where the middle 68% of those real players actually landed relative to the line, for your play time and how much you add; its low end can dip below your current pp because about 1 in 5 of them lost some pp to pp reworks and recalculations even while playing.` +
+      (DR.check ? ` Checked on real players left out of the fit, ${DR.check.inside}% landed inside it.` : "") +
+      " It's re-measured monthly. Faint dotted line: if you kept your exact percentile forever.";
+  }
   if (HIST.players) fill("hist", fmt(HIST.players));
   if (HIST.stars) { fill("starsn", fmt(HIST.stars.n)); fill("starspread", Math.round((Math.exp(HIST.stars.spread || 0.08) - 1) * 100)); }
   if (HIST.drift) { fill("klo", fmt(HIST.drift.lo, 2)); fill("khi", fmt(HIST.drift.hi, 2)); }

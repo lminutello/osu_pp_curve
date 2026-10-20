@@ -1,0 +1,54 @@
+name: Refresh projection (monthly)
+
+# The projection is measured on real players: their stats in the oldest data dump still online (~6 months back) and
+# today. Each month this looks up 2,000 more of them (1 API request each, ~35 minutes), refits, and updates the site.
+on:
+  schedule:
+    - cron: "37 6 12 * *"     # 06:37 UTC on the 12th of every month
+  workflow_dispatch:
+    inputs:
+      players:
+        description: "How many players to look up (about 1 second each)"
+        default: "2000"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install numpy
+        run: pip install "numpy>=1.26,<3"
+
+      - name: Pull and refit
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+        run: |
+          python scripts/drift.py pull --players "${{ inputs.players || '2000' }}"
+          python scripts/drift.py fit
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data/
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Monthly projection refresh ($(date -u +%Y-%m-%d))"
+            git pull --rebase -q origin main
+            git push
+          fi
