@@ -323,7 +323,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <p class="lead">Where you stand against <span data-f="n">thousands of</span> randomly sampled ranked osu!standard players from the official osu! data dumps<span data-f="sources"></span>.</p>
     <details class="fold"><summary>How the numbers are made</summary>
     <p>Curve: ln(pp) fitted as a quadratic in ln(hours), so the growth exponent shrinks as play time goes up. σ is the spread of ln(pp) among players at that play time, measured locally. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
-    <p>Ranks: the sample gives the share of ranked players above any pp; the leaderboard size and a correction for high pp come from <span data-f="ranksrc">real players' ranks</span>. Entering your own rank fine-tunes it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
+    <p>Ranks: looked up from <span data-f="ranksrc">real players' current ranks</span>, refreshed weekly. Checked against 3,000 other real players, estimates land within about 0.3% of their real rank at every pp level. "More pp than" is the same number as a share of the leaderboard. Entering your own rank scales the other rank estimates to match it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
     <p>Overwatch equivalent: your share of osu! players with <span data-f="owh">10</span>+ hours (<span data-f="own">about half</span> of the sample) you have more pp than, matched to the same spot on Blizzard's official Overwatch 2 rank distribution (July 2025, Season 17: Bronze 2.4%, Silver 12.6%, Gold 31.7%, Platinum 34.9%, Diamond 14.9%, Master 3.2%, Grandmaster 0.3%, Champion under 0.1%). It predates the Emerald tier added in August 2026, Blizzard doesn't publish divisions so they're split evenly within each tier, and the two ladders are different populations. The hours floor is there because Overwatch's ladder only counts people who unlocked ranked and played it that season, while osu!'s includes every account that ever set a score, including many that played a few maps and quit. Just for fun.</p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out.</p>
     <p>Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
@@ -400,7 +400,11 @@ const cdf = z => 0.5 * (1 + erf(z / Math.SQRT2));
 const Z_MAX = 3.5;   // no projection further than 3.5 sd off the trend: the drift was measured on players inside that
 const projOK = (H, pp) => H < H1 && Math.abs(zNow(H, pp)) <= Z_MAX;
 
-// ---------- ranks: share of all 10,000 sampled ranked players above a pp, times the leaderboard size
+// ---------- ranks
+// Global rank is a fixed rising function of pp on any given day, so it's looked up from real players' current
+// (pp, rank), refreshed weekly (M.rank.table: ln pp -> ln rank), and past ~9,500 pp from the real top 10,000
+// (M.rank.top). Checked on 3,000 other real players: within ~0.3% at every pp level. Older model files fall
+// back to the sample's share of players above, times the leaderboard size, with a measured correction.
 const LALL = ALLPP.map(Math.log);
 function fracAboveIn(L, pp) {                      // L: sorted ln(pp) of a population
   const l = Math.log(pp), NA = L.length;
@@ -411,35 +415,33 @@ function fracAboveIn(L, pp) {                      // L: sorted ln(pp) of a popu
   return { f: 1 - (pos + 0.5) / NA };
 }
 const fracAbove = pp => fracAboveIn(LALL, pp);
-// leaderboard size, calibrated on 400 real players' (pp, global rank) pairs from the osu! API, Oct 2026.
-// with it, predicted ranks land within ~4% of real ones in every pp bracket up to 6,000 pp
-const N_DEFAULT = M.rank.N;
+const N_DEFAULT = M.rank.N;                         // ranked players on the leaderboard
 const sig3 = v => { if (v < 1000) return Math.round(v); const k = 10 ** (Math.floor(Math.log10(v)) - 2); return Math.round(v / k) * k; };
-// the 10k sample thins out at high pp, so its ranks read optimistic up there; this correction is the measured
-// gap against 1,782 real players (ln pp -> ln factor). With it, ranks land within ~2% of real up to 9,000 pp.
 const RANK_CORR = M.rank.corr && M.rank.corr.length >= 2 ? M.rank.corr : [[0, 0], [20, 0]];
 const rankCorr = pp => Math.exp(interp(RANK_CORR, Math.log(pp)));
-// Overwatch's ladder only holds players who unlocked ranked (20 Quick Play wins) and played it that season, so the
-// Overwatch tile compares against sampled osu! players with OW_MIN_H+ hours, not every account. Rebuilt from each new dump.
-const OW_MIN_H = 10;
-const LOW = PTS.filter(([h]) => h >= OW_MIN_H).map(([, p]) => Math.log(p)).sort((a, b) => a - b);
-const owAbove = pp => { const t = topRank(pp);                 // % of them you're ahead of
-  if (t != null) return 100 * (1 - t / (N_DEFAULT * LOW.length / ALLPP.length));   // everyone up there has 10+ h
-  return 100 * (1 - Math.min(1, fracAboveIn(LOW, pp).f * rankCorr(pp))); };
-// the sample has almost nobody past ~10k pp, so up there ranks come straight from the real leaderboard's top 10,000
-// (pulled monthly): [ln pp, ln rank], pp strictly increasing
 const TOPL = [];
 for (const [x, r] of M.rank.top || []) if (!TOPL.length || x > TOPL[TOPL.length - 1][0]) TOPL.push([x, Math.log(r)]);
 const topRank = pp => { if (TOPL.length < 20) return null; const l = Math.log(pp);
   return l < TOPL[0][0] ? null : l >= TOPL[TOPL.length - 1][0] ? 1 : Math.exp(interp(TOPL, l)); };
-const shareAbove = pp => { const t = topRank(pp); if (t != null) return { f: t / N_DEFAULT, top: t <= 1 };
-  const r = fracAbove(pp); return { f: r.f * rankCorr(pp), top: r.top }; };
-function rankOf(pp) {
-  const t = topRank(pp);
-  if (t != null) { const r = Math.max(1, Math.round(t)); return { r, top: false, text: r === 1 ? "#1" : `~#${fmt(sig3(r))}` }; }
-  const { f, top } = shareAbove(pp), n = state.Ncal ?? N_DEFAULT, r = Math.max(1, Math.round(n * f));
-  return { r, top, text: top ? `top ~#${fmt(sig3(r))}` : `~#${fmt(sig3(r))}` };
+const RTAB = M.rank.table && M.rank.table.length >= 20 ? M.rank.table : null;
+function baseRank(pp) {                             // { r: estimated rank, exact: from the real top 10,000 }
+  const t = topRank(pp); if (t != null) return { r: t, exact: true };
+  if (RTAB) return { r: Math.exp(interp(RTAB, Math.log(pp))) };
+  const s = fracAbove(pp); return { r: N_DEFAULT * s.f * rankCorr(pp), top: s.top };
 }
+const shareAbove = pp => ({ f: Math.min(1, baseRank(pp).r / N_DEFAULT) });   // share of ranked players above you
+function rankOf(pp) {
+  const b = baseRank(pp), scale = b.exact ? 1 : (state.Ncal ?? N_DEFAULT) / N_DEFAULT, r = Math.max(1, Math.round(b.r * scale));
+  return { r, top: !!b.top, text: r === 1 ? "#1" : b.top ? `top ~#${fmt(sig3(r))}` : `~#${fmt(sig3(r))}` };
+}
+// Overwatch's ladder only holds players who unlocked ranked (20 Quick Play wins) and played it that season, so the
+// Overwatch tile compares against osu! players with OW_MIN_H+ hours, not every account. Up to OW_SPLIT pp that's
+// the sample's share of them above you; past it (where the sample thins and nearly everyone has 10+ hours) it's
+// your real rank over the number of 10+ hour players, sized so the two meet at OW_SPLIT.
+const OW_MIN_H = 10, OW_SPLIT = 6000;
+const LOW = PTS.filter(([h]) => h >= OW_MIN_H).map(([, p]) => Math.log(p)).sort((a, b) => a - b);
+const N10 = baseRank(OW_SPLIT).r / fracAboveIn(LOW, OW_SPLIT).f;
+const owAbove = pp => 100 * (1 - Math.min(1, pp < OW_SPLIT ? fracAboveIn(LOW, pp).f : baseRank(pp).r / N10));   // % of them you're ahead of
 const rankNote = () => state.Ncal ? "tuned to the rank you entered" : "calibrated on real players' ranks";
 
 // ---------- star level (rough): total pp is ~15x your top play (0.95 weighting + bonus pp),
@@ -705,7 +707,7 @@ const stat = (label, value, note, cls = "") => `<div class="tile"><dt>${label}</
 function renderCompare() {
   const [H, pp] = state.you, r = compare(H, pp), pos = r.z >= 0;
   const pct = r.pct, gr = grade(pct), g = gr[1], est = rankOf(pp);
-  const above = 100 * (1 - fracAbove(pp).f);
+  const above = 100 * (1 - shareAbove(pp).f);        // from your estimated rank, so the two always agree
   const warn = H > H1 ? "Beyond the sample, so this is extrapolated." : H > P.thin ? "Few players have this much play time, so treat these numbers as rough." : "";
   const rankTile = state.rank
     ? stat("Global rank", `#${fmt(state.rank)}`, "yours, from your profile")
@@ -810,7 +812,7 @@ function readInputs() {
   if (rank && !errs.some(e => e[0] === "pp" || e[0] === "Rank")) {
     const fa = shareAbove(pp); Ncal = rank / fa.f;
     const ratio = Ncal / N_DEFAULT, typical = sig3(Math.round(N_DEFAULT * fa.f));
-    if (ratio < 1 / 4 || ratio > 4) errs.push(["Rank", "That rank doesn't fit your pp",
+    if (ratio < 1 / 2 || ratio > 2) errs.push(["Rank", "That rank doesn't fit your pp",
       `${fmt(pp)} pp is usually around #${fmt(typical)}. Check the osu!standard Global Ranking on your profile`]);
   }
   return errs.length ? { errs } : { H, pp, rank, Ncal };
@@ -918,6 +920,7 @@ const REPO = "lminutello/osu_pp_curve";
 const WORKFLOWS = {                       // file name -> row it updates and how long it usually takes
   "refresh-model.yml": { rows: ["row-snap"], label: "Refresh model (monthly)", mins: "15–30" },
   "refresh-histories.yml": { rows: ["row-hist", "row-snap"], label: "Pull more player histories (manual)", mins: "25+" },
+  "refresh-ranks.yml": { rows: ["row-snap"], label: "Refresh ranks (weekly)", mins: "~20" },
 };
 let wasBusy = false, liveTimer = null;
 async function liveCheck() {

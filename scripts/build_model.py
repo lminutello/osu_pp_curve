@@ -284,6 +284,20 @@ def main():
         json.dump(model, f, separators=(",", ":"))
     print(f"wrote {args.out} ({os.path.getsize(args.out) / 1e6:.1f} MB): curve pp = exp({fwd[0]:.3f} + {fwd[1]:.3f} ln H + {fwd[2]:.4f} ln^2 H)")
 
+    # players whose current ranks the weekly rank refresh looks up: 1,000 spread evenly over ln(pp)
+    pos = sorted((p["pp"], u) for u, p in players.items() if p["pp"] > 0)
+    lo, hi = math.log(pos[0][0]), math.log(pos[-1][0]); bins = {}
+    for pp_, u in pos:
+        bins.setdefault(min(39, int((math.log(pp_) - lo) / (hi - lo + 1e-9) * 40)), []).append(u)
+    rng2 = np.random.default_rng(int(datetime.now(timezone.utc).strftime("%Y%m")))
+    ids = [u for b in sorted(bins) for u in rng2.permutation(bins[b])[:25]]
+    with open(os.path.join(ROOT, "data", "rank_ids.json"), "w") as f:
+        json.dump([int(u) for u in ids], f)
+    # rank lookup from the newest real (pp, rank) pairs, if there are any
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ranks
+    ranks.update_model(args.out)
+
 
 if __name__ == "__main__":
     main()
