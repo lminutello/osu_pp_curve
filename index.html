@@ -283,7 +283,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="field"><label for="in-pp">pp</label><input id="in-pp" class="pp" inputmode="decimal" value="2156"></div>
         <div class="field"><label for="in-rank">Global rank <small>(optional)</small></label><input id="in-rank" class="rank" inputmode="numeric" placeholder="optional"></div>
         <p class="hint">From your osu! profile, or drag your dot on the chart. <button class="me-btn" id="me-btn" type="button" hidden></button></p>
-        <details class="fold"><summary>More about these</summary><p>Days and hours come from Total Play Time (hours 0–24; minutes don't matter). Global rank is optional: adding it tunes every rank estimate on the page to you. Results update as you type. Example shown: sakul333.</p></details>
+        <details class="fold"><summary>More about these</summary><p>Days and hours come from Total Play Time (hours 0–24; minutes don't matter). Global rank is optional: if you add it, the rank tile shows yours instead of the estimate. Results update as you type. Example shown: sakul333.</p></details>
       </form>
 
       <div class="toggles">
@@ -323,7 +323,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <p class="lead">Where you stand against <span data-f="n">thousands of</span> randomly sampled ranked osu!standard players from the official osu! data dumps<span data-f="sources"></span>.</p>
     <details class="fold"><summary>How the numbers are made</summary>
     <p>Curve: ln(pp) fitted as a quadratic in ln(hours), so the growth exponent shrinks as play time goes up. σ is the spread of ln(pp) among players at that play time, measured locally. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
-    <p>Ranks: looked up from <span data-f="ranksrc">real players' current ranks</span>, refreshed weekly. Checked against 3,000 other real players, estimates land within about 0.3% of their real rank at every pp level. "More pp than" is the same number as a share of the leaderboard. Entering your own rank scales the other rank estimates to match it. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
+    <p>Ranks: looked up from <span data-f="ranksrc">real players' current ranks</span>, refreshed weekly. Checked against 3,000 other real players, estimates land within about 0.3% of their real rank at every pp level. "More pp than" is the same number as a share of the leaderboard. Entering your own rank shows it in place of the estimate. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
     <p>Overwatch equivalent: your share of osu! players with <span data-f="owh">10</span>+ hours (<span data-f="own">about half</span> of the sample) you have more pp than, matched to the same spot on Blizzard's official Overwatch 2 rank distribution (July 2025, Season 17: Bronze 2.4%, Silver 12.6%, Gold 31.7%, Platinum 34.9%, Diamond 14.9%, Master 3.2%, Grandmaster 0.3%, Champion under 0.1%). It predates the Emerald tier added in August 2026, Blizzard doesn't publish divisions so they're split evenly within each tier, and the two ladders are different populations. The hours floor is there because Overwatch's ladder only counts people who unlocked ranked and played it that season, while osu!'s includes every account that ever set a score, including many that played a few maps and quit. Just for fun.</p>
     <p id="selfcheck" hidden></p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out.</p>
@@ -381,24 +381,33 @@ for (let i = 0; i < N; i++) {
   Z[i] = FQ.z(lnH[i], lnP[i]);
 }
 // smooth percentile: Gaussian weights on distance in log units, so nobody drops in or out of a hard window
-const BW = 0.25;
-function kernelPct(arr, center, hit) {
+// where players are sparse (far out) the window widens smoothly so it always holds ~60 players' worth of weight
+const BW = 0.25, MIN_EFF = 60, SOFT = 0.15;
+function kernelOnce(arr, center, hit, bw) {
   let sw = 0, sw2 = 0, sh = 0;
-  for (let i = 0; i < arr.length; i++) { const d = (arr[i] - center) / BW; if (d > 4 || d < -4) continue;
-    const w = Math.exp(-0.5 * d * d); sw += w; sw2 += w * w; if (hit(i)) sh += w; }
+  for (let i = 0; i < arr.length; i++) { const d = (arr[i] - center) / bw; if (d > 4 || d < -4) continue;
+    const w = Math.exp(-0.5 * d * d); sw += w; sw2 += w * w; sh += w * hit(i); }
   return sw ? [100 * sh / sw, sw * sw / sw2] : [null, 0];
+}
+function kernelPct(arr, center, hit) {
+  const first = kernelOnce(arr, center, hit, BW);
+  if (first[1] >= MIN_EFF) return first;
+  // effective count grows about in step with the window, so this widening is continuous in the count
+  const bw = Math.min(3, BW * MIN_EFF / Math.max(first[1], 1));
+  return kernelOnce(arr, center, hit, bw);
 }
 function compare(H, pp) {
   const r = {}, x = Math.log(H), lp = Math.log(pp);
   r.median = medPP(H); r.z = FQ.z(x, lp); r.ratio = pp / r.median;
-  [r.pct, r.nH] = kernelPct(lnH, x, i => Z[i] < r.z);
+  // each player counts as "below you" smoothly (over ±0.15 sd) rather than all-or-nothing, so one player near you
+  // can't make the number jump where players are sparse
+  [r.pct, r.nH] = kernelPct(lnH, x, i => cdf((r.z - Z[i]) / SOFT));
   const s = RQ.z(lp, x); r.medHours = medHoursAt(lp);
-  [r.faster, r.nP] = kernelPct(lnP2, lp, i => S[i] > s);
+  [r.faster, r.nP] = kernelPct(lnP2, lp, i => cdf((S[i] - s) / SOFT));
   // too few real players nearby (far past the data): fall back to the fitted normal model
-  // with few real players nearby (far past the data), blend smoothly into the fitted model: all model under 10, all real past 40
-  const mix = (v, n, model) => { const w = v == null ? 0 : Math.min(1, Math.max(0, (n - 10) / 30)); return w * v + (1 - w) * model; };
-  r.pct = mix(r.pct, r.nH, 100 * cdf(r.z)); if (r.nH < 10) r.nH = 0;
-  r.faster = mix(r.faster, r.nP, 100 * (1 - cdf(s))); if (r.nP < 10) r.nP = 0;   // faster = fewer hours than you
+  // only if even the widest window finds almost nobody (past the edge of the data) use the fitted model instead
+  if (r.pct == null || r.nH < 20) { r.pct = 100 * cdf(r.z); r.nH = 0; }
+  if (r.faster == null || r.nP < 20) { r.faster = 100 * (1 - cdf(s)); r.nP = 0; }   // faster = fewer hours than you
   return r;
 }
 const erf = x => { const sg = Math.sign(x); x = Math.abs(x); const t = 1 / (1 + 0.3275911 * x);
@@ -445,7 +454,7 @@ function baseRank(pp) {                             // { r: estimated rank, w: w
 }
 const shareAbove = pp => ({ f: Math.min(1, baseRank(pp).r / N_DEFAULT) });   // share of ranked players above you
 function rankOf(pp) {
-  const b = baseRank(pp), scale = ((state.Ncal ?? N_DEFAULT) / N_DEFAULT) ** (1 - (b.w || 0)), r = Math.max(1, Math.round(b.r * scale));
+  const b = baseRank(pp), r = Math.max(1, Math.round(b.r));
   return { r, top: !!b.top, text: r === 1 ? "#1" : b.top ? `top ~#${fmt(sig3(r))}` : `~#${fmt(sig3(r))}` };
 }
 // Overwatch's ladder only holds players who unlocked ranked (20 Quick Play wins) and played it that season, so the
@@ -571,10 +580,21 @@ function projRaw(H, pp, Hf) {
 }
 // more play time never projects less pp: each line is the running maximum along the way (far above the trend the
 // raw numbers can dip, because the spread of the top players narrows with play time faster than they drift)
+// (the bottom of the range starts its running maximum one step in, so its dip below your current pp is kept)
+const PSTEP = 0.02; let projCache = null;
 function projAt(H, pp, Hf) {
-  const out = projRaw(H, pp, Hf), d = Math.log(Math.max(Hf, H) / H), n = Math.min(40, Math.ceil(d / 0.02));
-  for (let i = 1; i < n; i++) { const r = projRaw(H, pp, H * Math.exp(d * i / n)); for (let j = 0; j < 3; j++) if (r[j] > out[j]) out[j] = r[j]; }
-  return out;
+  const key = `${H}|${pp}`;
+  if (!projCache || projCache.key !== key) {
+    const n = Math.ceil(Math.log(projMax(H) / H) / PSTEP) + 2, env = [];
+    for (let k = 0; k <= n; k++) {
+      const r = projRaw(H, pp, H * Math.exp(k * PSTEP));
+      if (k === 0) env.push(r);
+      else { const p = env[k - 1]; env.push([Math.max(p[0], r[0]), k === 1 ? r[1] : Math.max(p[1], r[1]), Math.max(p[2], r[2])]); }
+    }
+    projCache = { key, env };
+  }
+  const E = projCache.env, x = Math.max(0, Math.log(Hf / H)) / PSTEP, k = Math.min(Math.floor(x), E.length - 2), t = Math.min(1, x - k);
+  return [0, 1, 2].map(j => E[k][j] + (E[k + 1][j] - E[k][j]) * t);
 }
 const projKeep = (H, pp, Hf) => ppAtZ(Hf, zNow(H, pp));   // old assumption: keep your percentile forever
 // projection slider = extra hours from now, same scale for everyone: 0 to +1,000 h (about 42 days of play time),
@@ -956,7 +976,7 @@ const REPO = "lminutello/osu_pp_curve";
 const WORKFLOWS = {                       // file name -> row it updates and how long it usually takes
   "refresh-model.yml": { rows: ["row-snap"], label: "Refresh model (monthly)", mins: "15–30" },
   "refresh-histories.yml": { rows: ["row-hist", "row-snap"], label: "Pull more player histories (manual)", mins: "25+" },
-  "refresh-ranks.yml": { rows: ["row-snap"], label: "Refresh ranks (weekly)", mins: "~20" },
+  "refresh-ranks.yml": { rows: ["row-snap"], label: "Refresh ranks (weekly)", mins: "~40" },
   "refresh-drift.yml": { rows: ["row-snap"], label: "Refresh projection (monthly)", mins: "~40" },
 };
 let wasBusy = false, liveTimer = null;

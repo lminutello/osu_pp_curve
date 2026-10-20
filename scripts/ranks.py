@@ -3,7 +3,7 @@
 Ranks for the site: a lookup of real (pp, global rank) pairs, refreshed weekly.
 
 Global rank is a fixed, rising function of pp on any given day, so the most accurate way to estimate it is to look
-it up from real players' current pp and rank. This pulls ~1,000 players spread evenly over every pp level (their ids
+it up from real players' current pp and rank. This pulls ~2,000 players spread evenly over every pp level (their ids
 are in data/rank_ids.json, picked from the dump sample by build_model.py), smooths ln(rank) against ln(pp), and
 writes the table into data/model.json. Ranks past ~9,500 pp come from the real top 10,000 (data/leaderboard.json).
 Held-out check (Oct 2026): ranks land within ~0.3% of real at every pp level.
