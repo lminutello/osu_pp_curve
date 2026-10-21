@@ -322,14 +322,15 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
       </div>
 
       <div class="box mine" id="mine-row" hidden>
-        <div class="box-title"><span id="mine-title">Your progress</span></div>
+        <div class="box-title"><span id="mine-title">Your progress</span><button class="reset" id="mine-reset" type="button">↺ Back to now</button></div>
         <div class="box-head">
           <div class="box-pp" id="mine-pp"></div>
           <div class="box-rank"><strong id="mine-rank"></strong><span id="mine-rank-note"></span></div>
         </div>
         <div class="box-meta" id="mine-meta"></div>
+        <input type="range" id="mine-slider" min="0" max="1000" step="1" value="1000" aria-label="Point in your progress">
         <div class="box-val" id="mine-val"></div>
-        <details class="fold"><summary>How this is recorded</summary><p>Green line: your pp against your play time. Solid with dots: one point each time your stats are pulled (daily, when they've changed); between points it's a straight line on the chart. Dashed, before the first point: your earlier progress, rebuilt from the dates of your top 100 plays and your plays per month, so it's rough (it can't see scores you later beat). Recorded points are kept forever.</p></details>
+        <details class="fold"><summary>How this is recorded</summary><p>Green line: your pp against your play time. Solid with dots: recorded, one point each time your stats are pulled (daily, when they've changed), kept forever. Dashed: rebuilt from the dates of your top 100 plays and your plays per month (rough: it can't see scores you later beat). Dotted: a one-time estimate back to your first hour, from how far ahead of the typical player real players at your level were earlier on. Between points it's a straight line on the chart. Ranks, "better than" and the Overwatch rank at every point use today's data, so they show where that pp would stand now, not where it stood then.</p></details>
       </div>
     </section>
 
@@ -531,7 +532,7 @@ function parseRank(raw) {
 // ---------- state
 const $ = id => document.getElementById(id);
 let MINE = null;                                      // "my progress" history, loaded below
-const state = { log: true, you: null, estH: 100, proj: false, trend: false, mine: false, projExtra: 150, rank: null, Ncal: null };
+const state = { log: true, you: null, estH: 100, proj: false, trend: false, mine: false, mineT: 1, projExtra: 150, rank: null, Ncal: null };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 const dh = H => { if (H < 1) return `${Math.max(1, Math.round(H * 60))}m`;
@@ -705,15 +706,20 @@ function draw() {
     ctx.restore();
     labels.push([px, py, `${fmt(k)} pp @ ${dh(Ht)}`, C.proj, "#fff", "al"]);
   }
-  // my progress (green): rebuilt past dashed, recorded points solid with dots
+  // my progress (green): estimate dotted, rebuilt dashed, recorded solid with dots, ring at the slider point
   if (state.mine && MINE) {
-    const pts = MINE.all;
-    const path = (arr, dash, alpha) => { if (arr.length < 2) return; ctx.beginPath(); ctx.setLineDash(dash); ctx.globalAlpha = alpha; ctx.lineWidth = 2.6;
-      arr.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))); ctx.strokeStyle = C.mine; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; };
-    const nReb = MINE.rebuilt.length;
-    path(pts.slice(0, nReb + 1), [6, 5], .75);          // rebuilt past, joined to the first recorded point
-    path(pts.slice(nReb), [], 1);
-    pts.slice(nReb).forEach(([x, y]) => { ctx.beginPath(); ctx.arc(X(x), Y(y), 3.2, 0, 2 * Math.PI); ctx.fillStyle = C.mine; ctx.fill(); });
+    const P_ = MINE.path, style = { est: [[2, 4], .6], reb: [[6, 5], .8], rec: [[], 1] };
+    for (let i = 1; i < P_.length; i++) {
+      const [dash, alpha] = style[P_[i][2] === "rec" && P_[i - 1][2] !== "rec" ? "reb" : P_[i][2]];
+      ctx.beginPath(); ctx.setLineDash(dash); ctx.globalAlpha = alpha; ctx.lineWidth = 2.6; ctx.strokeStyle = C.mine;
+      ctx.moveTo(X(P_[i - 1][0]), Y(P_[i - 1][1])); ctx.lineTo(X(P_[i][0]), Y(P_[i][1])); ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    P_.filter(p => p[2] === "rec").forEach(([x, y]) => { ctx.beginPath(); ctx.arc(X(x), Y(y), 3.2, 0, 2 * Math.PI); ctx.fillStyle = C.mine; ctx.fill(); });
+    const Hs_ = mineH(), ps_ = mineAt(Hs_), mx = X(Hs_), my = Y(ps_);
+    ctx.beginPath(); ctx.arc(mx, my, 9, 0, 2 * Math.PI); ctx.fillStyle = C.mine; ctx.globalAlpha = .25; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(mx, my, 6, 0, 2 * Math.PI); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = C.mine; ctx.stroke();
+    if (state.mineT < 0.999) labels.push([mx, my, `${fmt(ps_)} pp @ ${dh(Hs_)}`, C.mine, "#06281b", "bl"]);
   }
   // you (pink)
   if (state.you) {
@@ -1116,28 +1122,49 @@ function fillMe(me) {
   inputs.pp.value = Math.round(me.pp); inputs.Rank.value = me.rank || "";
 }
 // ---------- "my progress": data/me_history.json gets a point at every daily pull (plus a rebuild of the past)
+// path = [[hours, pp, kind, time?]] sorted by hours; kind: "est" (one-time estimate), "reb" (rebuilt), "rec" (recorded)
+function mineAt(H) {                                   // pp at any play time along your path (straight in log-log)
+  const P_ = MINE.path, l = Math.log(H);
+  if (H <= P_[0][0]) return P_[0][1];
+  for (let i = 1; i < P_.length; i++) if (H <= P_[i][0]) {
+    const [h0, p0] = P_[i - 1], [h1, p1] = P_[i], t = (l - Math.log(h0)) / (Math.log(h1) - Math.log(h0));
+    return Math.exp(Math.log(p0) + t * (Math.log(p1) - Math.log(p0)));
+  }
+  return P_[P_.length - 1][1];
+}
+const mineKind = H => { const P_ = MINE.path; let k = P_[0]; for (const p of P_) { if (p[0] <= H + 1e-9) k = p; } return k; };
+const mineH = () => { const P_ = MINE.path, a = Math.log(P_[0][0]), b = Math.log(P_[P_.length - 1][0]); return Math.exp(a + (b - a) * state.mineT); };
 function renderMine() {
   if (!MINE) return;
-  const R = MINE.rec, a = R[0], b = R[R.length - 1], dH = b[1] - a[1], dP = b[2] - a[2];
-  const pctAt = (H, pp) => compare(H, pp).pct, nice = t => t ? new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-  const real = realPPH(Math.sqrt(a[1] * b[1]));
+  const H = mineH(), pp = mineAt(H), r = compare(H, pp), rk = rankOf(pp), now = MINE.path[MINE.path.length - 1], k = mineKind(H);
+  const near = MINE.path.filter(p => Math.abs(Math.log(p[0] / H)) < 0.35), pace = near.length >= 2 ? (near[near.length - 1][1] - near[0][1]) / (near[near.length - 1][0] - near[0][0]) : null;
+  const real = realPPH(H), src = { est: "estimated", reb: "rebuilt from your top plays", rec: "recorded" }[k[2]];
+  const when = k[2] === "rec" && k[3] ? ` ${new Date(k[3]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "";
   $("mine-title").textContent = `${MINE.user}'s progress`;
-  $("mine-pp").innerHTML = `${dP >= 0 ? "+" : "−"}${fmt(Math.abs(dP))}<small> pp</small>`;
-  $("mine-rank").innerHTML = a[3] && b[3] ? `#${fmt(a[3])} → #${fmt(b[3])}` : "";
-  $("mine-rank-note").textContent = a[0] ? `since ${nice(a[0])}` : "since the first record";
-  $("mine-meta").innerHTML = `<span><i>better than</i> ${fmt(pctAt(a[1], a[2]), 1)}% → <b style="color:#fff">${fmt(pctAt(b[1], b[2]), 1)}%</b></span>` +
-    (dH > 0.5 ? `<span><i>your rate</i> <b style="color:#fff">~${fmt(dP / dH, 0)} pp/h</b></span>` : "") +
-    (real && dH > 0.5 ? `<span><i>real players near the median here</i> ~${fmt(real[2], 0)} pp/h</span>` : "") +
-    `<span><i>recorded points</i> ${R.length}${MINE.rebuilt.length ? ` · ${MINE.rebuilt.length} rebuilt months before` : ""}</span>`;
-  $("mine-val").innerHTML = `+${dh(dH)}<small>${fmt(a[1], 0)} → ${fmt(b[1], 0)} h</small>`;
+  $("mine-pp").innerHTML = `${fmt(pp)}<small> pp</small>`;
+  $("mine-rank").innerHTML = `${rk.text} ${starPill(pp)} ${owPill(pp)}`;
+  $("mine-rank-note").textContent = "on today's leaderboard";
+  $("mine-meta").innerHTML = `<span><i>better than</i> <b style="color:#fff">${fmt(r.pct, 1)}%</b> <i>of players at ${dh(H)} today</i></span>` +
+    `<span><i>std devs</i> ${r.z >= 0 ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ</span><span><i>typical pp</i> ${fmt(r.median)}</span>` +
+    (pace != null && pace > 0 ? `<span><i>your pace here</i> <b style="color:#fff">~${fmt(pace, 0)} pp/h</b></span>` : "") +
+    (real ? `<span><i>real players near the median</i> ~${fmt(real[2], 0)} pp/h</span>` : "") +
+    `<span style="color:var(--mine)">${src}${when}</span>`;
+  $("mine-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small><small>${now[0] - H < 0.05 ? "now" : `−${dh(now[0] - H)} from now`}</small>`;
+  $("mine-slider").value = Math.round(state.mineT * 1000);
 }
 fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(hist => {
   const rec = (hist && hist.points || []).filter(p => p[1] >= 1 && p[2] > 0).sort((x, y) => x[1] - y[1]);
   if (rec.length < 2) return;
-  const rebuilt = (hist.rebuilt || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1]).sort((x, y) => x[0] - y[0]);
-  MINE = { user: hist.username, rec, rebuilt, all: [...rebuilt, ...rec.map(p => [p[1], p[2]])] };
+  const reb = (hist.rebuilt || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1]).sort((x, y) => x[0] - y[0]);
+  const lowest = reb.length ? reb[0][0] : rec[0][1];
+  const est = (hist.estimated || []).filter(([h, p]) => h >= 1 && p > 0 && h < lowest * 0.98).sort((x, y) => x[0] - y[0]);
+  const path = [...est.map(([h, p]) => [h, p, "est"]), ...reb.map(([h, p]) => [h, p, "reb"]), ...rec.map(p => [p[1], p[2], "rec", p[0]])];
+  MINE = { user: hist.username, path };
+  $("mine-btn").querySelector("span").innerHTML = `${hist.username}'s <b>progress</b>`;
   $("mine-btn").hidden = false; renderMine();
 });
+$("mine-slider").addEventListener("input", e => { state.mineT = +e.target.value / 1000; renderMine(); draw(); });
+$("mine-reset").onclick = () => { state.mineT = 1; renderMine(); draw(); };
 fetch("data/me.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(me => {
   if (me && me.pp && me.hours >= 1) {
     fillMe(me);                                       // open on the latest stats instead of a frozen example
