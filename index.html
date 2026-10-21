@@ -20,7 +20,7 @@
   --bg: #1b1619; --bg-2: #231c20; --surface: #2a2226; --surface-2: #382e32; --line: #46393f;
   --fg: #ffffff; --fg-2: #e8dfe3; --muted: #a8999f;
   --pink: #ff66aa; --pink-hi: #ff8fc2; --pink-ink: #2a0f1d;
-  --blue: #66ccff; --gold: #ffcc22; --proj: #ff3b47; --green: #b3d944; --purple: #c27aff; --red: #ff5a6e;
+  --blue: #66ccff; --gold: #ffcc22; --proj: #ff3b47; --mine: #2fe0a0; --green: #b3d944; --purple: #c27aff; --red: #ff5a6e;
   --dot: rgba(102,204,255,.10); --band1: rgba(102,204,255,.22); --band2: rgba(102,204,255,.08);
   --thin: rgba(255,204,34,.05);
   --f: "Nunito", "Varela Round", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -109,6 +109,7 @@ h1 .o { color: var(--pink); }
 .sw.line { height: 3px; background: #fff; }
 .sw.b1 { background: var(--band1); } .sw.b2 { background: var(--band2); border: 1px solid var(--band1); }
 .sw.you { width: 12px; height: 12px; border-radius: 50%; background: var(--pink); border: 2px solid #fff; }
+.sw.mine { height: 3px; background: var(--mine); }
 .sw.est { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); border: 2px solid #fff; }
 .axes-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 3px;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font: 800 12.5px var(--f); }
@@ -147,6 +148,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .switch { --c: var(--proj); display: inline-flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px 0; cursor: pointer;
   font: 800 13.5px var(--f); color: var(--fg-2); }
 .switch.gold { --c: var(--gold); }
+.switch.mine { --c: var(--mine); }
 .switch .trk { width: 40px; height: 22px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); position: relative; transition: background .2s, border-color .2s; }
 .switch .trk::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted);
   transition: transform .22s cubic-bezier(.3,1.4,.5,1), background .2s; }
@@ -157,6 +159,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .box { --c: var(--proj); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 12px 14px;
   margin: 0 6px; border-radius: 14px; background: color-mix(in srgb, var(--c) 7%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
 .box.gold { --c: var(--gold); }
+.box.mine { --c: var(--mine); }
 .box input[type=range] { accent-color: var(--c); }
 .box-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; align-items: center; }
 .box-title { font: 800 10.5px var(--f); letter-spacing: .12em; text-transform: uppercase; color: var(--c); grid-column: 1 / -1; margin-bottom: -4px;
@@ -272,6 +275,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
           <span><i class="sw you"></i>you</span>
           <span id="lg-proj" hidden><i class="sw proj"></i>your projection <i class="sw projdot"></i></span>
           <span id="lg-est" hidden><i class="sw est"></i>trend point</span>
+          <span id="lg-mine" hidden><i class="sw mine"></i>your progress</span>
         </div>
         <button class="axes-switch" id="axes-btn" type="button" role="switch" aria-checked="true" aria-label="Log axes"><i class="knob" aria-hidden="true"></i><span class="lin">Linear</span><span class="log">Log</span></button>
       </div>
@@ -290,6 +294,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
       <div class="toggles">
         <button class="switch" id="proj-btn" type="button" role="switch" aria-checked="false"><i class="trk" aria-hidden="true"></i><span>Project my <b>future</b></span></button>
         <button class="switch gold" id="trend-btn" type="button" role="switch" aria-checked="false"><i class="trk" aria-hidden="true"></i><span>Explore the <b>trend</b></span></button>
+        <button class="switch mine" id="mine-btn" type="button" role="switch" aria-checked="false" hidden><i class="trk" aria-hidden="true"></i><span>My <b>progress</b></span></button>
       </div>
 
       <div class="box" id="proj-row" hidden>
@@ -314,6 +319,17 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <input type="range" id="trend-slider" min="0" max="1000" step="1" value="0" aria-label="Hours played for the trend point">
         <div class="box-val" id="trend-val"></div>
         <details class="fold"><summary>What these numbers mean</summary><p>Yellow dot: the median player at that play time, with the middle 68% of players as the yellow bar. "Real players gained" is how fast players near the median actually improved at this stage: <span data-f="pphsrc">measured from tracked players' histories</span>, with its range in brackets. It can differ from the curve's slope, which compares different players at each play time rather than following the same ones.</p></details>
+      </div>
+
+      <div class="box mine" id="mine-row" hidden>
+        <div class="box-title"><span id="mine-title">Your progress</span></div>
+        <div class="box-head">
+          <div class="box-pp" id="mine-pp"></div>
+          <div class="box-rank"><strong id="mine-rank"></strong><span id="mine-rank-note"></span></div>
+        </div>
+        <div class="box-meta" id="mine-meta"></div>
+        <div class="box-val" id="mine-val"></div>
+        <details class="fold"><summary>How this is recorded</summary><p>Green line: your pp against your play time. Solid with dots: one point each time your stats are pulled (daily, when they've changed); between points it's a straight line on the chart. Dashed, before the first point: your earlier progress, rebuilt from the dates of your top 100 plays and your plays per month, so it's rough (it can't see scores you later beat). Recorded points are kept forever.</p></details>
       </div>
     </section>
 
@@ -514,7 +530,8 @@ function parseRank(raw) {
 
 // ---------- state
 const $ = id => document.getElementById(id);
-const state = { log: true, you: null, estH: 100, proj: false, trend: false, projExtra: 150, rank: null, Ncal: null };
+let MINE = null;                                      // "my progress" history, loaded below
+const state = { log: true, you: null, estH: 100, proj: false, trend: false, mine: false, projExtra: 150, rank: null, Ncal: null };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 const dh = H => { if (H < 1) return `${Math.max(1, Math.round(H * 60))}m`;
@@ -612,7 +629,7 @@ function draw() {
   if (!geo) layout();
   const { w, h, m, xr, yr, X, Y } = geo;
   ctx.clearRect(0, 0, w, h);
-  const C = { line: css("--line"), muted: css("--muted"), dot: css("--dot"), b1: css("--band1"), b2: css("--band2"),
+  const C = { mine: css("--mine"), line: css("--line"), muted: css("--muted"), dot: css("--dot"), b1: css("--band1"), b2: css("--band2"),
     pink: css("--pink"), gold: css("--gold"), thin: css("--thin"), ink: css("--pink-ink"), proj: css("--proj") };
   ctx.fillStyle = C.thin; const tx = X(P.thin); ctx.fillRect(tx, m.t, w - m.r - tx, h - m.t - m.b);
   ctx.font = `700 11.5px ${css("--f")}`; ctx.lineWidth = 1;
@@ -687,6 +704,16 @@ function draw() {
     ctx.fillStyle = "#fff"; ctx.fillRect(-8, -8, 16, 16); ctx.lineWidth = 3.5; ctx.strokeStyle = C.proj; ctx.strokeRect(-8, -8, 16, 16);
     ctx.restore();
     labels.push([px, py, `${fmt(k)} pp @ ${dh(Ht)}`, C.proj, "#fff", "al"]);
+  }
+  // my progress (green): rebuilt past dashed, recorded points solid with dots
+  if (state.mine && MINE) {
+    const pts = MINE.all;
+    const path = (arr, dash, alpha) => { if (arr.length < 2) return; ctx.beginPath(); ctx.setLineDash(dash); ctx.globalAlpha = alpha; ctx.lineWidth = 2.6;
+      arr.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))); ctx.strokeStyle = C.mine; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; };
+    const nReb = MINE.rebuilt.length;
+    path(pts.slice(0, nReb + 1), [6, 5], .75);          // rebuilt past, joined to the first recorded point
+    path(pts.slice(nReb), [], 1);
+    pts.slice(nReb).forEach(([x, y]) => { ctx.beginPath(); ctx.arc(X(x), Y(y), 3.2, 0, 2 * Math.PI); ctx.fillStyle = C.mine; ctx.fill(); });
   }
   // you (pink)
   if (state.you) {
@@ -851,7 +878,7 @@ function renderTrend() {
   $("trend-meta").innerHTML = `<span><i>middle 68%</i> ${fmt(band(H, -1))}–${fmt(band(H, 1))}</span><span><i>middle 95%</i> ${fmt(band(H, -2))}–${fmt(band(H, 2))}</span>${realPPH(H) ? `<span><i>real players gained</i> <b style="color:#fff">~${fmt(realPPH(H)[2], 0)} pp/h</b> <i>(${fmt(realPPH(H)[0], 0)}–${fmt(realPPH(H)[1], 0)})</i></span>` : ""}<span><i>curve slope</i> ~${fmt(ppPerHour(H), 1)} pp/h</span><span><i>exponent</i> ${fmt(expo(H), 2)}</span>${H > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
   $("trend-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small>`;
 }
-const renderAll = () => { renderCompare(); renderProj(); renderTrend(); };
+const renderAll = () => { renderCompare(); renderProj(); renderTrend(); if (typeof renderMine === "function") renderMine(); };
 
 // ---------- inputs
 const inputs = { Days: $("in-days"), Hours: $("in-hours"), pp: $("in-pp"), Rank: $("in-rank") };
@@ -916,6 +943,7 @@ function toggle(key, btn, box, legend) {
 }
 $("proj-btn").onclick = () => toggle("proj", "proj-btn", "proj-row", "lg-proj");
 $("trend-btn").onclick = () => toggle("trend", "trend-btn", "trend-row", "lg-est");
+$("mine-btn").onclick = () => toggle("mine", "mine-btn", "mine-row", "lg-mine");
 $("axes-btn").onclick = () => { state.log = !state.log; $("axes-btn").setAttribute("aria-checked", state.log); layout(); draw(); };
 
 // ---------- drag your dot (or tap the plot) to try other hours and pp; works on log and linear axes
@@ -1087,6 +1115,29 @@ function fillMe(me) {
   inputs.Days.value = Math.floor(h / 24); inputs.Hours.value = h % 24;
   inputs.pp.value = Math.round(me.pp); inputs.Rank.value = me.rank || "";
 }
+// ---------- "my progress": data/me_history.json gets a point at every daily pull (plus a rebuild of the past)
+function renderMine() {
+  if (!MINE) return;
+  const R = MINE.rec, a = R[0], b = R[R.length - 1], dH = b[1] - a[1], dP = b[2] - a[2];
+  const pctAt = (H, pp) => compare(H, pp).pct, nice = t => t ? new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  const real = realPPH(Math.sqrt(a[1] * b[1]));
+  $("mine-title").textContent = `${MINE.user}'s progress`;
+  $("mine-pp").innerHTML = `${dP >= 0 ? "+" : "−"}${fmt(Math.abs(dP))}<small> pp</small>`;
+  $("mine-rank").innerHTML = a[3] && b[3] ? `#${fmt(a[3])} → #${fmt(b[3])}` : "";
+  $("mine-rank-note").textContent = a[0] ? `since ${nice(a[0])}` : "since the first record";
+  $("mine-meta").innerHTML = `<span><i>better than</i> ${fmt(pctAt(a[1], a[2]), 1)}% → <b style="color:#fff">${fmt(pctAt(b[1], b[2]), 1)}%</b></span>` +
+    (dH > 0.5 ? `<span><i>your rate</i> <b style="color:#fff">~${fmt(dP / dH, 0)} pp/h</b></span>` : "") +
+    (real && dH > 0.5 ? `<span><i>real players near the median here</i> ~${fmt(real[2], 0)} pp/h</span>` : "") +
+    `<span><i>recorded points</i> ${R.length}${MINE.rebuilt.length ? ` · ${MINE.rebuilt.length} rebuilt months before` : ""}</span>`;
+  $("mine-val").innerHTML = `+${dh(dH)}<small>${fmt(a[1], 0)} → ${fmt(b[1], 0)} h</small>`;
+}
+fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(hist => {
+  const rec = (hist && hist.points || []).filter(p => p[1] >= 1 && p[2] > 0).sort((x, y) => x[1] - y[1]);
+  if (rec.length < 2) return;
+  const rebuilt = (hist.rebuilt || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1]).sort((x, y) => x[0] - y[0]);
+  MINE = { user: hist.username, rec, rebuilt, all: [...rebuilt, ...rec.map(p => [p[1], p[2]])] };
+  $("mine-btn").hidden = false; renderMine();
+});
 fetch("data/me.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(me => {
   if (me && me.pp && me.hours >= 1) {
     fillMe(me);                                       // open on the latest stats instead of a frozen example
