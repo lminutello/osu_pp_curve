@@ -325,7 +325,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <details class="fold"><summary>How the numbers are made</summary>
     <p>Curve: the typical pp and the bands are the real median and percentiles of players at each play time (smoothed along play time, around a quadratic in ln(hours) as a backbone). σ is measured through those same percentiles: ±1σ and ±2σ are the edges of the middle 68% and 95% of real players at your play time. "Better than" compares you with every player after adjusting each one to the trend, weighting players more the closer their play time is to yours, so the number moves smoothly as you change your hours. Rank letters are this page's own labels for that percentile, not in-game grades.</p>
     <p>Ranks: looked up from <span data-f="ranksrc">real players' current ranks</span>, refreshed weekly. How close they land to real ranks is in the self-check below. "More pp than" is the same number as a share of the leaderboard. Entering your own rank shows it in place of the estimate. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
-    <p>Overwatch equivalent: your share of osu! players with <span data-f="owh">10</span>+ hours (<span data-f="own">about half</span> of the sample; past 6,000 pp, from real ranks) you have more pp than, matched to the same spot on Overwatch's rank ladder. Blizzard hasn't published a breakdown since adding Emerald (Aug 2026), so the shares are rebuilt from its last chart (July 2025) the way the Emerald patch notes describe the change: Emerald took old high Platinum and old low Diamond, and every other rank shifted half a tier. That gives Bronze 1.2%, Silver 7.5%, Gold 22.2%, Platinum 33.4%, Emerald 24.8%, Diamond 9.1%, Master 1.7%, Grandmaster 0.15%, Champion 0.025%, and puts the 50% mark at mid Platinum, which matches the in-game ranking screen. Divisions are split evenly within each tier, and the two ladders are different populations. The hours floor is there because Overwatch's ladder only counts people who unlocked ranked and played it that season, while osu!'s includes every account that ever set a score, including many that played a few maps and quit.</p>
+    <p>Overwatch equivalent: your share of active osu! players (<span data-f="owh">10+ hours, played recently</span>; <span data-f="own">about a third of the sample</span>; past 6,000 pp, from real ranks) you have more pp than, matched to the same spot on Overwatch's rank ladder. Blizzard hasn't published a breakdown since adding Emerald (Aug 2026), so the shares are rebuilt from its last chart (July 2025) the way the Emerald patch notes describe the change: Emerald took old high Platinum and old low Diamond, and every other rank shifted half a tier. That gives Bronze 1.2%, Silver 7.5%, Gold 22.2%, Platinum 33.4%, Emerald 24.8%, Diamond 9.1%, Master 1.7%, Grandmaster 0.15%, Champion 0.025%, and puts the 50% mark at mid Platinum, which matches the in-game ranking screen. Divisions are split evenly within each tier, and the two ladders are different populations. The filter is there because Overwatch's ladder, like most ranked games, only counts people who unlocked ranked and played it that season, while osu!'s leaderboard keeps everyone who played in roughly the last year, including many who barely played or have stopped. Filtering to active players makes Overwatch ranks about a division lower than counting every 10+ hour account.</p>
     <p id="selfcheck" hidden></p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out. Checked on players left out of the fit (Oct 2026), the curve was within 0.15★ of the real median in every pp bracket.</p>
     <p id="proj-foot">Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
@@ -459,11 +459,13 @@ function rankOf(pp) {
   return { r, top: !!b.top, text: r === 1 ? "#1" : b.top ? `top ~#${fmt(sig3(r))}` : `~#${fmt(sig3(r))}` };
 }
 // Overwatch's ladder only holds players who unlocked ranked (20 Quick Play wins) and played it that season, so the
-// Overwatch tile compares against osu! players with OW_MIN_H+ hours, not every account. Up to OW_SPLIT pp that's
-// the sample's share of them above you; past it (where the sample thins and nearly everyone has 10+ hours) it's
-// your real rank over the number of 10+ hour players, sized so the two meet at OW_SPLIT.
-const OW_MIN_H = 10, OW_SPLIT = 6000;
-const LOW = PTS.filter(([h]) => h >= OW_MIN_H).map(([, p]) => Math.log(p)).sort((a, b) => a - b);
+// Overwatch tile compares against osu! players who are actually playing, the way most ranked ladders count players:
+// OW_MIN_H+ hours in total and last played within M.ow.activeDays days (built monthly from the dumps; older model files
+// fall back to hours only). Up to OW_SPLIT pp that's the sample's share of them above you; past it (where the sample
+// thins) it's your real rank over the size of that group, sized so the two meet at OW_SPLIT.
+const OW_MIN_H = M.ow ? M.ow.minHours : 10, OW_DAYS = M.ow && M.ow.activeDays, OW_SPLIT = 6000;
+const LOW = M.ow && M.ow.lpp.length > 500 ? M.ow.lpp : PTS.filter(([h]) => h >= OW_MIN_H).map(([, p]) => Math.log(p)).sort((a, b) => a - b);
+const OW_GROUP = OW_DAYS ? `active osu! players (${OW_MIN_H}+ h, played in the last ${OW_DAYS} days)` : `osu! players with ${OW_MIN_H}+ hours`;
 const N10 = baseRank(OW_SPLIT).r / fracAboveIn(LOW, OW_SPLIT).f;
 const owAbove = pp => 100 * (1 - Math.min(1, pp < OW_SPLIT ? fracAboveIn(LOW, pp).f : baseRank(pp).r / N10));   // % of them you're ahead of
 
@@ -762,7 +764,7 @@ function owRank(pctAbove) {                        // pctAbove = % of players yo
 const owPill = pp => { const o = owRank(owAbove(pp)); return `<span class="owr" style="--oc:${o.col}" title="Overwatch equivalent">${o.name} ${o.div}</span>`; };
 const owTile = pp => { const o = owRank(owAbove(pp));
   return `<div class="tile ow"><dt>Overwatch equivalent</dt><dd style="color:${o.col}">${o.name} ${o.div}</dd>
-    <div class="note">top ${o.top < 0.01 ? "<0.01" : o.top < 1 ? fmt(o.top, 2) : fmt(o.top, 0)}% of osu! players with ${OW_MIN_H}+ hours, the same spot on Overwatch's ladder</div></div>`; };
+    <div class="note">top ${o.top < 0.01 ? "<0.01" : o.top < 1 ? fmt(o.top, 2) : fmt(o.top, 0)}% of ${OW_GROUP}, the same spot on Overwatch's ladder</div></div>`; };
 const stat = (label, value, note, cls = "") => `<div class="tile"><dt>${label}</dt><dd class="${cls}">${value}</dd>${note ? `<div class="note">${note}</div>` : ""}</div>`;
 function renderCompare() {
   const [H, pp] = state.you, r = compare(H, pp), pos = r.z >= 0;
@@ -783,7 +785,7 @@ function renderCompare() {
       ${Math.abs(r.z) > 4 ? stat("Std devs", `${pos ? ">+4" : "<−4"}σ`, "far outside every real player at this play time", "pink")
         : stat("Std devs", `${pos ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ`, `${pos ? "above" : "below"} typical at ${fmt(H)} h`, "pink")}
       ${stat("Typical pp", fmt(r.median), `you have ${fmt(r.ratio, 2)}× that`)}
-      ${stat("More pp than", `${fmt(owAbove(pp), 1)}%`, `of players with ${OW_MIN_H}+ hours played`, "blue")}
+      ${stat("More pp than", `${fmt(owAbove(pp), 1)}%`, `of ${OW_GROUP}`, "blue")}
       ${stat("More pp than", `${fmt(above, 1)}%`, "of all ranked players, any play time")}
       ${rankTile}
       ${stat("Star level", starPill(pp, true), pp > 10000 ? "typical stars of top plays (extrapolated past 10k pp)" : "typical stars of top plays at your pp")}
@@ -1040,7 +1042,7 @@ async function liveCheck() {
     ${HIST.players ? `<span class="row" id="row-hist"><span class="dot ${histOk ? "" : "old"}"></span><span class="tag h">Histories</span>
       <span class="meta ${histOk ? "" : "old"}"><b>${fmt(HIST.players)}</b> players · ${pulled ? short(pulled) : ""}${histOk ? "" : " · due"}</span></span>` : ""}`;
   st.insertAdjacentHTML("beforeend", `<div class="more">
-    <p><b>Snapshot:</b> ${fmt(total)} random ranked players from ${span}; ${fmt(M.n)} of them have play time logged. Used for the curve, "better than" and the 10+ hour comparisons (including the Overwatch equivalent). Refreshes monthly.${snapOk ? "" : ` <span style="color:var(--gold)">Stale: ${snapWhy}.</span>`}</p>
+    <p><b>Snapshot:</b> ${fmt(total)} random ranked players from ${span}; ${fmt(M.n)} of them have play time logged. Used for the curve, "better than" and the active-player comparisons (including the Overwatch equivalent). Refreshes monthly.${snapOk ? "" : ` <span style="color:var(--gold)">Stale: ${snapWhy}.</span>`}</p>
     ${M.rank.pairsAt ? `<p><b>Ranks:</b> looked up from ${M.rank.source}. Refreshes weekly.</p>` : ""}
     ${DR.real ? `<p><b>Projection:</b> measured on ${fmt(DR.n)} real players' pp and play time about ${Math.round(DR.gapDays / 30.4)} months apart (last looked up ${nice(DR.pulledAt)}). Also used for real pp per hour. Refreshes monthly.</p>` : ""}
     ${HIST.players ? `<p><b>Histories:</b> ${fmt(HIST.players)} players' progress over time, pulled from the osu! API${hMonth ? ` on ${hMonth}` : ""}. Used for star level${DR.real ? "" : ", the projection and real pp per hour"}. Updated by hand.${histOk ? "" : ' <span style="color:var(--gold)">Over 6 months old.</span>'}</p>` : ""}
@@ -1053,7 +1055,7 @@ async function liveCheck() {
   fill("n", fmt(M.n)); fill("thin", fmt(Math.round(M.thin / 10) * 10)); fill("built", new Date(M.builtAt || (M.built + "T12:00:00Z")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
   fill("sources", M.sources && M.sources[0] && /^\d{4}_/.test(M.sources[0]) ? ` (${M.sources.map(s => s.replace(/_/g, "-")).join(", ")})` : "");
   fill("ranksrc", M.rank.source || "real players' ranks");
-  fill("owh", OW_MIN_H); fill("own", `${fmt(LOW.length)} of the ${fmt(ALLPP.length)} sampled players`);
+  fill("owh", OW_DAYS ? `${OW_MIN_H}+ hours and played in the last ${OW_DAYS} days` : `${OW_MIN_H}+ hours`); fill("own", `${fmt(LOW.length)} of the ${fmt(ALLPP.length)} sampled players`);
   if (DR.real) {
     const months = Math.round(DR.gapDays / 30.4);
     document.getElementById("proj-foot").textContent = `Projection: measured on ${fmt(DR.n)} real players, each looked up in the oldest official data dump still online (about ${months} months back) and again today, refreshed monthly. ` +

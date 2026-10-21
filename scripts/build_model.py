@@ -125,7 +125,8 @@ def from_users_csv(path):
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
             try:
-                out[r["user_id"]] = {"pp": float(r["pp"]), "hours": float(r["hours"]), "rank": int(float(r.get("rank") or 0))}
+                out[r["user_id"]] = {"pp": float(r["pp"]), "hours": float(r["hours"]), "rank": int(float(r.get("rank") or 0)),
+                                     "last_played": r.get("last_played") or "", "dump": r.get("dump") or ""}
             except (KeyError, ValueError):
                 pass
     return out
@@ -252,6 +253,8 @@ def main():
             archive_dump(d, stats)
             rank_col = rank_col or rc
             print(f"  {d}: {len(stats):,} players{'' if rc else ' (no rank column)'}")
+            for s_ in stats.values():
+                s_["dump"] = d                        # when this row was recorded, for "played recently"
             players.update(stats)
         sources = sorted(dumps)
     print(f"merged: {len(players):,} distinct players")
@@ -259,9 +262,9 @@ def main():
     if args.write_users:
         os.makedirs(os.path.dirname(os.path.abspath(args.write_users)), exist_ok=True)
         with open(args.write_users, "w", newline="") as f:
-            w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank"])
+            w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank", "last_played", "dump"])
             for u, p in players.items():
-                w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"]])
+                w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"], p.get("last_played", ""), p.get("dump", "")])
         with open(args.write_users + ".sources.json", "w") as f:
             json.dump(sources, f)
 
@@ -314,6 +317,20 @@ def main():
     rng = np.random.default_rng(0)
     keep = np.arange(len(H)) if len(H) <= 12000 else np.sort(rng.choice(len(H), 12000, replace=False))
 
+    # the Overwatch comparison group: players who are actually playing, like Overwatch's ladder (which only counts
+    # people who played ranked this season): 10+ hours in total and last played within 60 days of their dump
+    OW_MIN_H, OW_DAYS = 10, 60
+    def active(p):
+        try:
+            return (datetime.strptime(p["dump"], "%Y_%m_%d") - datetime.strptime(p["last_played"][:10], "%Y-%m-%d")).days <= OW_DAYS
+        except (KeyError, ValueError, TypeError):
+            return None
+    flags = [active(p) for p in players.values()]
+    known = sum(f is not None for f in flags) >= 0.9 * len(players)
+    ow_pp = sorted(p["pp"] for p, f in zip(players.values(), flags) if p["pp"] > 0 and p["hours"] >= OW_MIN_H and (f or not known))
+    ow = {"minHours": OW_MIN_H, "activeDays": OW_DAYS if known else None, "n": len(ow_pp),
+          "lpp": [round(math.log(x), 4) for x in ow_pp]}
+    print(f"Overwatch group: {len(ow_pp):,} players with {OW_MIN_H}+ hours" + (f" who played in the last {OW_DAYS} days" if known else " (no last-played data)"))
     check = self_check(lh, lp)
     print(f"self-check (held-out): {check['in68']}% inside the 68% band, {check['in95']}% inside the 95% band, "
           f"{check['below']}% below the median; worst play-time bracket off by {check['worstBin']} points")
@@ -329,6 +346,7 @@ def main():
         "revSd": robust_sd_table(lp2, rev_res),
         "rq": kernel_quantiles(lp2, rev_res, rev),
         "check": check,
+        "ow": ow,
         "pts0": [[round(float(h), 3), round(float(p), 1)] for h, p in zip(H0, PP0)],
         "hMin": round(float(H.min()), 3), "hMax": round(float(H.max()), 1),
         "thin": round(float(np.percentile(H, 98)), 1),
