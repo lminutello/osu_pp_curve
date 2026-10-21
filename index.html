@@ -330,7 +330,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="box-meta" id="mine-meta"></div>
         <input type="range" id="mine-slider" min="0" max="1000" step="1" value="1000" aria-label="Point in your progress">
         <div class="box-val" id="mine-val"></div>
-        <details class="fold"><summary>How this is recorded</summary><p>Green line: your pp against your play time. Solid with dots: recorded, one point each time your stats are pulled (daily, when they've changed), kept forever. Dashed: rebuilt from the dates of your top 100 plays and your plays per month (rough: it can't see scores you later beat). Dotted: a one-time estimate back to your first hour, from how far ahead of the typical player real players at your level were earlier on. Between points it's a straight line on the chart. Ranks, "better than" and the Overwatch rank at every point use today's data, so they show where that pp would stand now, not where it stood then.</p></details>
+        <details class="fold"><summary>How this is recorded</summary><p>Green line: your pp against your play time. Solid with dots: recorded, one point each time your stats are pulled (daily, when they've changed), kept forever. Dotted: a one-time estimate back to your first hour, from how far ahead of the typical player real players at your level were earlier on. Dashed: rebuilt from the dates of your top 100 plays and your plays per month; that can only see scores still in your top 100, so it's a floor on your past pp and is used only where it's above the estimate. Between points it's a straight line on the chart. Ranks, "better than" and the Overwatch rank at every point use today's data, so they show where that pp would stand now, not where it stood then.</p></details>
       </div>
     </section>
 
@@ -1155,10 +1155,18 @@ function renderMine() {
 fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(hist => {
   const rec = (hist && hist.points || []).filter(p => p[1] >= 1 && p[2] > 0).sort((x, y) => x[1] - y[1]);
   if (rec.length < 2) return;
-  const reb = (hist.rebuilt || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1]).sort((x, y) => x[0] - y[0]);
-  const lowest = reb.length ? reb[0][0] : rec[0][1];
-  const est = (hist.estimated || []).filter(([h, p]) => h >= 1 && p > 0 && h < lowest * 0.98).sort((x, y) => x[0] - y[0]);
-  const path = [...est.map(([h, p]) => [h, p, "est"]), ...reb.map(([h, p]) => [h, p, "reb"]), ...rec.map(p => [p[1], p[2], "rec", p[0]])];
+  // before the first record: the one-time estimate, and the rebuild from your top 100 plays. The rebuild can only see
+  // scores still in your top 100, so it's a floor on your past pp (it reads far too low for anyone improving fast,
+  // whose old scores have all been replaced): a rebuilt point is used only where it's above the estimate
+  const est = (hist.estimated || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1]).sort((x, y) => x[0] - y[0]);
+  const estAt = H => { if (!est.length) return 0; let q = est[0]; for (const e of est) if (e[0] <= H) q = e; return q[1]; };
+  const reb = (hist.rebuilt || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1] && p > estAt(h)).sort((x, y) => x[0] - y[0]);
+  let path = [...est.map(([h, p]) => [h, p, "est"]), ...reb.map(([h, p]) => [h, p, "reb"]), ...rec.map(p => [p[1], p[2], "rec", p[0]])]
+    .sort((x, y) => x[0] - y[0]);
+  // pp never goes down with more play time: walking back from now, drop any earlier point above a later one
+  const kept = []; let floorPP = Infinity;
+  for (let i = path.length - 1; i >= 0; i--) if (path[i][2] === "rec" || path[i][1] <= floorPP) { kept.unshift(path[i]); floorPP = Math.min(floorPP, path[i][1]); }
+  path = kept;
   MINE = { user: hist.username, path };
   $("mine-btn").querySelector("span").innerHTML = `${hist.username}'s <b>progress</b>`;
   $("mine-btn").hidden = false; renderMine();
