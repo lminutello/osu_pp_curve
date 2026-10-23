@@ -7,7 +7,7 @@ Each run (daily, by the "Update my stats" workflow):
   - 3 API requests: a token, the profile, and the player's top 100 plays
   - me.json: the latest pp / play time / rank, written only if something changed
   - me_history.json:
-      points   one [time, hours, pp, rank] per pull where pp or play time changed; kept forever
+      points   one [time, hours, pp, rank, accuracy] per pull where pp or play time changed; kept forever
       rebuilt  the player's past before recording started, [hours, pp] per month: past pp rebuilt from the dates of
                their top 100 plays, past play time from plays per month (the same method the site used to measure
                other players' histories; rough, since it can't see scores that were later beaten)
@@ -68,7 +68,7 @@ def main():
         hist = {"username": me["username"], "points": [], "rebuilt": []}
     last = hist["points"][-1] if hist["points"] else None
     if me["pp"] and me["hours"] and (not last or abs(last[1] - me["hours"]) > 1e-3 or abs(last[2] - me["pp"]) > 1e-2):
-        hist["points"].append([now, me["hours"], me["pp"], me["rank"]])
+        hist["points"].append([now, me["hours"], me["pp"], me["rank"], me["acc"]])
     try:                                                   # rebuild the past from dated top plays (best effort)
         scores = get(f"https://osu.ppy.sh/api/v2/users/{u['id']}/scores/best?mode=osu&limit=100&legacy_only=0", token) or []
         rec = {"pp": st.get("pp"), "play_time": st.get("play_time"), "play_count": st.get("play_count"),

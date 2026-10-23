@@ -19,6 +19,7 @@ Not affiliated with osu! or ppy Pty Ltd.
 | The curve, bands, percentiles | Newest 3 monthly `random_10000` dumps from [data.ppy.sh](https://data.ppy.sh) (~30,000 players) | Real median and percentiles of players at each play time, smoothed around a quadratic in ln(hours); "better than" counts real players near your play time, weighted by distance. Re-checked on held-out players every rebuild |
 | Global rank, more pp than | ~2,000 real players' current (pp, rank), refreshed weekly, plus the real top 10,000 | Direct lookup of rank from pp (smoothed); median error under 0.1% on held-out players (see the self-check on the page) |
 | Overwatch equivalent | The sample's 10+ hour players (real ranks past 6,000 pp) | Same spot on Blizzard's published Overwatch rank distribution |
+| Accuracy | The same dumps' accuracy column (matches the profile's Hit Accuracy) | Real percentiles of accuracy at each pp, from players very close to your pp; re-checked on held-out players every rebuild |
 | Star level | ~2,000 players' top plays from the osu! API | Median star rating of each player's top 10 plays without rate/difficulty mods, fitted as a curve in log space |
 | Projection, real pp per hour | Players in the oldest dump still online (~6–7 months back) looked up again today; 2,000 more each month | Distance from the trend fades as players add play time (fitted on real pairs); the range is where the middle 68% of real players landed |
 

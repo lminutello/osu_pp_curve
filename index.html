@@ -231,7 +231,8 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .tile dt { font: 800 10.5px var(--f); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .tile dd { margin: 0; font: 900 22px/1.2 var(--f); font-variant-numeric: tabular-nums; color: #fff; }
 .tile dd.pink { color: var(--pink-hi); } .tile dd.blue { color: var(--blue); } .tile dd.gold { color: var(--gold); }
-.tile.ow { grid-column: 1 / -1; }
+.tile.ow, .tile.wide { grid-column: 1 / -1; }
+.field input.acc { width: 120px; }
 .tile.ow dd { text-shadow: 0 0 18px currentColor; }
 .tile .note { color: var(--muted); font-size: 11.5px; font-weight: 600; line-height: 1.35; }
 .loading { margin: 0; color: var(--muted); font-weight: 800; font-size: 15px; animation: pulse 1.2s ease-in-out infinite; }
@@ -287,6 +288,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <div class="field"><label for="in-hours">Hours</label><input id="in-hours" inputmode="decimal" value="6"></div>
         <div class="field"><label for="in-pp">pp</label><input id="in-pp" class="pp" inputmode="decimal" value="2156"></div>
         <div class="field"><label for="in-rank">Global rank <small>(optional)</small></label><input id="in-rank" class="rank" inputmode="numeric" placeholder="optional"></div>
+        <div class="field"><label for="in-acc">Accuracy <small>(optional)</small></label><input id="in-acc" class="rank acc" inputmode="decimal" placeholder="optional"></div>
         <p class="hint">From your osu! profile, or drag your dot on the chart. <button class="me-btn" id="me-btn" type="button" hidden></button></p>
         <details class="fold"><summary>More about these</summary><p>Days and hours come from Total Play Time (hours 0–24; minutes don't matter). Global rank is optional: if you add it, the rank tile shows yours instead of the estimate. Results update as you type. Example shown: sakul333.</p></details>
       </form>
@@ -344,6 +346,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <p>Ranks: looked up from <span data-f="ranksrc">real players' current ranks</span>, refreshed weekly. How close they land to real ranks is in the self-check below. "More pp than" is the same number as a share of the leaderboard. Entering your own rank shows it in place of the estimate. Future ranks assume today's leaderboard; in practice everyone else keeps climbing too.</p>
     <p>Overwatch equivalent: your share of active osu! players (<span data-f="owh">10+ hours, played recently</span>; <span data-f="own">about a third of the sample</span>; past 6,000 pp, from real ranks) you have more pp than, matched to the same spot on Overwatch's rank ladder. Blizzard hasn't published a breakdown since adding Emerald (Aug 2026), so the shares are rebuilt from its last chart (July 2025) the way the Emerald patch notes describe the change: Emerald took old high Platinum and old low Diamond, and every other rank shifted half a tier. That gives Bronze 1.2%, Silver 7.5%, Gold 22.2%, Platinum 33.4%, Emerald 24.8%, Diamond 9.1%, Master 1.7%, Grandmaster 0.15%, Champion 0.025%, and puts the 50% mark at mid Platinum, which matches the in-game ranking screen. Divisions are split evenly within each tier, and the two ladders are different populations. The filter is there because Overwatch's ladder, like most ranked games, only counts people who unlocked ranked and played it that season, while osu!'s leaderboard keeps everyone who played in roughly the last year, including many who barely played or have stopped. Filtering to active players makes Overwatch ranks about a division lower than counting every 10+ hour account.</p>
     <p id="selfcheck" hidden></p>
+    <p>Accuracy: your Hit Accuracy against players at about your pp, from the same dumps (the dumps' accuracy matches the profile's Hit Accuracy). Accuracy rises fast with pp, so only players very close to your pp are compared, and the comparison is rebuilt monthly.</p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out. Checked on players left out of the fit (Oct 2026), the curve was within 0.15★ of the real median in every pp bracket.</p>
     <p id="proj-foot">Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
     <p>Data: data.ppy.sh random_10000 dumps and the osu! API; players with under 1 hour logged are left out of the curve. Hours = total_seconds_played. Past about <span data-f="thin">1,000</span> hours only 2% of players remain, so read that region loosely. The curve rebuilds itself monthly, ranks weekly and the projection monthly; this version was built <span data-f="built">recently</span>.</p>
@@ -532,7 +535,7 @@ function parseRank(raw) {
 // ---------- state
 const $ = id => document.getElementById(id);
 let MINE = null;                                      // "my progress" history, loaded below
-const state = { log: true, you: null, estH: 100, proj: false, trend: false, mine: false, mineT: 1, projExtra: 150, rank: null, Ncal: null };
+const state = { acc: null, log: true, you: null, estH: 100, proj: false, trend: false, mine: false, mineT: 1, projExtra: 150, rank: null, Ncal: null };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 const dh = H => { if (H < 1) return `${Math.max(1, Math.round(H * 60))}m`;
@@ -794,6 +797,22 @@ function owRank(pctAbove) {                        // pctAbove = % of players yo
     lo += share;
   }
 }
+// ---------- accuracy: real percentiles of players' hit accuracy at each pp, from the dumps (M.acc, rebuilt monthly)
+const ACC = M.acc && M.acc.tab && M.acc.tab.length > 5 ? M.acc : null;
+function accRow(pp) { const l = Math.log(pp); return ACC.q.map((_, j) => interp(ACC.tab.map(r => [r[0], r[j + 1]]), l)); }
+function accPct(pp, a) {                              // % of players at this pp with lower accuracy
+  const row = accRow(pp), q = ACC.q;
+  if (a <= row[0]) return q[0] / 2;
+  if (a >= row[row.length - 1]) return (q[q.length - 1] + 100) / 2;
+  for (let i = 1; i < row.length; i++) if (a <= row[i]) return q[i - 1] + (q[i] - q[i - 1]) * (a - row[i - 1]) / Math.max(row[i] - row[i - 1], 1e-9);
+}
+const accTile = pp => {
+  if (!ACC) return "";
+  const typ = accRow(pp)[ACC.q.indexOf(50)];
+  if (state.acc == null) return `<div class="tile wide"><dt>Accuracy</dt><dd>—</dd><div class="note">add your Hit Accuracy above to compare · typical at your pp: ${fmt(typ, 1)}%</div></div>`;
+  const p = accPct(pp, state.acc), txt = p < 1 ? "under 1" : p > 99 ? "over 99" : fmt(p, 1);
+  return `<div class="tile wide"><dt>Accuracy</dt><dd class="blue">${fmt(state.acc, 2)}%</dd><div class="note">better than ${txt}% of players at your pp · typical there: ${fmt(typ, 1)}%</div></div>`;
+};
 const owPill = pp => { const o = owRank(owAbove(pp)); return `<span class="owr" style="--oc:${o.col}" title="Overwatch equivalent">${o.name} ${o.div}</span>`; };
 const owTile = pp => { const o = owRank(owAbove(pp));
   return `<div class="tile ow"><dt>Overwatch equivalent</dt><dd style="color:${o.col}">${o.name} ${o.div}</dd>
@@ -822,6 +841,7 @@ function renderCompare() {
       ${stat("More pp than", `${fmt(above, 1)}%`, "of all ranked players, any play time")}
       ${rankTile}
       ${stat("Star level", starPill(pp, true), pp > 10000 ? "typical stars of top plays (extrapolated past 10k pp)" : "typical stars of top plays at your pp")}
+      ${accTile(pp)}
       ${owTile(pp)}
     </dl>
     ${warn ? `<p class="warn">${warn}</p>` : ""}
@@ -887,7 +907,7 @@ function renderTrend() {
 const renderAll = () => { renderCompare(); renderProj(); renderTrend(); if (typeof renderMine === "function") renderMine(); };
 
 // ---------- inputs
-const inputs = { Days: $("in-days"), Hours: $("in-hours"), pp: $("in-pp"), Rank: $("in-rank") };
+const inputs = { Days: $("in-days"), Hours: $("in-hours"), pp: $("in-pp"), Rank: $("in-rank"), Accuracy: $("in-acc") };
 function showError(err, fields) {
   const t = $("toast"), [, msg, tip] = err;
   t.innerHTML = `<span class="toast-x" aria-hidden="true">✕</span><span class="toast-msg"><span>Not allowed · ${msg}</span>${tip ? `<small>${tip}</small>` : ""}</span>`;
@@ -897,11 +917,17 @@ function showError(err, fields) {
 function clearError() { $("toast").hidden = true; Object.values(inputs).forEach(i => i.classList.remove("bad")); }
 function readInputs() {
   const errs = [];
-  let d = 0, hh = 0, pp = 0, rank = null;
+  let d = 0, hh = 0, pp = 0, rank = null, acc = null;
   try { d = num(inputs.Days.value, "Days", { blank: true, max: 5000 }); } catch (e) { errs.push(e); }
   try { hh = num(inputs.Hours.value, "Hours", { blank: true, max: 24 }); } catch (e) { errs.push(e); }
   try { pp = num(inputs.pp.value, "pp", { zero: false, max: 40000 }); } catch (e) { errs.push(e); }
   try { rank = parseRank(inputs.Rank.value); } catch (e) { errs.push(e); }
+  if (inputs.Accuracy.value.trim() !== "") {
+    const t = inputs.Accuracy.value.trim().replace(/%$/, "");
+    if (!/^(\d+(\.\d*)?|\.\d+)$/.test(t)) errs.push(["Accuracy", `Accuracy: "${inputs.Accuracy.value.trim()}" isn't a number`, "Use the Hit Accuracy from your profile, like 96.87"]);
+    else if (+t <= 0 || +t > 100) errs.push(["Accuracy", "Accuracy must be between 0 and 100", "Use the Hit Accuracy from your profile, like 96.87"]);
+    else acc = +t;
+  }
   const H = d * 24 + hh;
   if (!errs.some(e => e[0] === "Days" || e[0] === "Hours") && H < 1) errs.push(["Hours", "Need at least 1 hour of play time", "Nobody under 1 hour is in the sample"]);
   let Ncal = null;
@@ -911,7 +937,7 @@ function readInputs() {
     if (ratio < 1 / 2 || ratio > 2) errs.push(["Rank", "That rank doesn't fit your pp",
       `${fmt(pp)} pp is usually around #${fmt(typical)}. Check the osu!standard Global Ranking on your profile`]);
   }
-  return errs.length ? { errs } : { H, pp, rank, Ncal };
+  return errs.length ? { errs } : { H, pp, rank, Ncal, acc };
 }
 let errTimer, lastKey = "";
 function check(animate) {
@@ -924,7 +950,7 @@ function check(animate) {
     return;
   }
   clearError();
-  state.rank = r.rank; if (r.rank) state.Ncal = r.Ncal;
+  state.rank = r.rank; if (r.rank) state.Ncal = r.Ncal; state.acc = r.acc;
   const key = `${r.H}|${r.pp}`;
   state.you = [r.H, r.pp]; renderAll();
   if (animate || key !== lastKey) approach(); else draw();
@@ -1110,6 +1136,7 @@ async function liveCheck() {
   if (ck || rc) {
     sc.innerHTML = "<b>Self-check</b>, rerun on every rebuild with players left out of the fit: " + [
       ck && `the middle 68% band held ${ck.in68}% of them and the 95% band ${ck.in95}% (${ck.below}% fell below the median; every play-time bracket within ${ck.worstBin} percentage point${ck.worstBin === 1 ? "" : "s"})`,
+      ck && ck.accWorst != null && `accuracy "better than" was within ${ck.accWorst} points of the right share in every tenth`,
       rc && `rank estimates were off from real ranks by a median ${rc.median < 0.1 ? "under 0.1" : rc.median}% (90% within ${rc.p90}%, ${fmt(rc.n)} players)`].filter(Boolean).join("; ") + ".";
     sc.hidden = false;
   }
@@ -1120,6 +1147,7 @@ function fillMe(me) {
   const h = Math.floor(me.hours);
   inputs.Days.value = Math.floor(h / 24); inputs.Hours.value = h % 24;
   inputs.pp.value = Math.round(me.pp); inputs.Rank.value = me.rank || "";
+  inputs.Accuracy.value = me.acc ? (+me.acc).toFixed(2) : "";
 }
 // ---------- "my progress": data/me_history.json gets a point at every daily pull (plus a rebuild of the past)
 // path = [[hours, pp, kind, time?]] sorted by hours; kind: "est" (one-time estimate), "reb" (rebuilt), "rec" (recorded)
@@ -1148,6 +1176,7 @@ function renderMine() {
     `<span><i>std devs</i> ${r.z >= 0 ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ</span><span><i>typical pp</i> ${fmt(r.median)}</span>` +
     (pace != null && pace > 0 ? `<span><i>your pace here</i> <b style="color:#fff">~${fmt(pace, 0)} pp/h</b></span>` : "") +
     (real ? `<span><i>real players near the median</i> ~${fmt(real[2], 0)} pp/h</span>` : "") +
+    (k[2] === "rec" && k[4] && ACC ? `<span><i>accuracy</i> ${fmt(k[4], 2)}% <i>(better than ${fmt(accPct(k[1], k[4]), 0)}% at that pp)</i></span>` : "") +
     `<span style="color:var(--mine)">${src}${when}</span>`;
   $("mine-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small><small>${now[0] - H < 0.05 ? "now" : `−${dh(now[0] - H)} from now`}</small>`;
   $("mine-slider").value = Math.round(state.mineT * 1000);
@@ -1161,7 +1190,7 @@ fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() :
   const est = (hist.estimated || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1]).sort((x, y) => x[0] - y[0]);
   const estAt = H => { if (!est.length) return 0; let q = est[0]; for (const e of est) if (e[0] <= H) q = e; return q[1]; };
   const reb = (hist.rebuilt || []).filter(([h, p]) => h >= 1 && p > 0 && h < rec[0][1] && p > estAt(h)).sort((x, y) => x[0] - y[0]);
-  let path = [...est.map(([h, p]) => [h, p, "est"]), ...reb.map(([h, p]) => [h, p, "reb"]), ...rec.map(p => [p[1], p[2], "rec", p[0]])]
+  let path = [...est.map(([h, p]) => [h, p, "est"]), ...reb.map(([h, p]) => [h, p, "reb"]), ...rec.map(p => [p[1], p[2], "rec", p[0], p[4]])]
     .sort((x, y) => x[0] - y[0]);
   // pp never goes down with more play time: walking back from now, drop any earlier point above a later one
   const kept = []; let floorPP = Infinity;

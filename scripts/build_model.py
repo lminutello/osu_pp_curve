@@ -99,7 +99,8 @@ def read_stats(path):
                 continue
             out[r[ix["user_id"]]] = {"pp": pp, "hours": sec / 3600, "rank": rank,
                                      "playcount": r[ix["playcount"]] if "playcount" in ix else "",
-                                     "last_played": r[ix["last_played"]] if "last_played" in ix else ""}
+                                     "last_played": r[ix["last_played"]] if "last_played" in ix else "",
+                                     "acc": r[ix["accuracy_new"]] if "accuracy_new" in ix else ""}
     return out, rank_col
 
 
@@ -114,9 +115,9 @@ def archive_dump(dump, stats):
     os.makedirs(ARCHIVE, exist_ok=True)
     import gzip
     with gzip.open(path, "wt", newline="") as f:
-        w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank", "playcount", "last_played"])
+        w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank", "playcount", "last_played", "acc"])
         for u, p in stats.items():
-            w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"], p.get("playcount", ""), p.get("last_played", "")])
+            w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"], p.get("playcount", ""), p.get("last_played", ""), p.get("acc", "")])
     print(f"  archived {dump} -> data/dumps/{dump}.csv.gz")
 
 
@@ -126,7 +127,8 @@ def from_users_csv(path):
         for r in csv.DictReader(f):
             try:
                 out[r["user_id"]] = {"pp": float(r["pp"]), "hours": float(r["hours"]), "rank": int(float(r.get("rank") or 0)),
-                                     "last_played": r.get("last_played") or "", "dump": r.get("dump") or ""}
+                                     "last_played": r.get("last_played") or "", "dump": r.get("dump") or "",
+                                     "acc": r.get("acc") or ""}
             except (KeyError, ValueError):
                 pass
     return out
@@ -202,6 +204,54 @@ def self_check(x, y, folds=5):
             "below": round(float(np.mean(z < 0)) * 100, 1), "worstBin": round(worst * 100, 1)}
 
 
+ACC_Q = [1, 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 98, 99]
+
+
+def accuracy_table(players, bw=0.06, min_eff=300, step=0.05):
+    """Accuracy (the profile's hit accuracy, from the dumps) of players at each pp: real percentiles, smoothed along
+    ln(pp) with Gaussian weights (widened where data is thin). Accuracy changes fast with pp, so the window is narrow.
+    None if the dumps have no accuracy column."""
+    pairs = []
+    for p in players.values():
+        try:
+            a = float(p.get("acc") or "nan")
+        except ValueError:
+            continue
+        if p["pp"] > 0 and 0 < a <= 100:
+            pairs.append((math.log(p["pp"]), a))
+    if len(pairs) < 2000:
+        return None
+    x, a = np.array([q for q, _ in pairs]), np.array([v for _, v in pairs]); o = np.argsort(a); x, a = x[o], a[o]
+    tab = []
+    for g in np.arange(x.min(), x.max() + step, step):
+        b = bw
+        while True:
+            w = np.exp(-0.5 * ((x - g) / b) ** 2)
+            if w.sum() ** 2 / (w * w).sum() >= min_eff or b > 3: break
+            b *= 1.25
+        c = (np.cumsum(w) - 0.5 * w) / w.sum()
+        tab.append([round(float(g), 3)] + [round(float(v), 3) for v in np.interp(np.array(ACC_Q) / 100, c, a)])
+    return {"q": ACC_Q, "tab": tab, "n": len(pairs)}
+
+
+def accuracy_check(players, folds=5):
+    """Held-out: build the table from 4/5 of players; for the rest, how far each tenth of 'better than' strays from 10%."""
+    ids = [u for u, p in players.items() if p["pp"] > 0 and (p.get("acc") or "") not in ("",)]
+    fold = np.random.default_rng(2).integers(0, folds, len(ids)); pit = []
+    for k in range(folds):
+        t = accuracy_table({u: players[u] for u, f in zip(ids, fold) if f != k})
+        if not t: return None
+        T = np.array(t["tab"])
+        for u, f in zip(ids, fold):
+            if f != k: continue
+            a = float(players[u]["acc"])
+            if not 0 < a <= 100: continue
+            row = [np.interp(math.log(players[u]["pp"]), T[:, 0], T[:, j]) for j in range(1, len(t["q"]) + 1)]
+            pit.append(float(np.interp(a, row, t["q"], left=0.5, right=99.5)))
+    h = np.histogram(pit, bins=np.linspace(0, 100, 11))[0] / len(pit) * 100
+    return round(float(np.abs(h - 10).max()), 1)
+
+
 def frac_above_fn(sorted_log_pp):
     L, n = sorted_log_pp, len(sorted_log_pp)
     def fa(pp):
@@ -262,9 +312,9 @@ def main():
     if args.write_users:
         os.makedirs(os.path.dirname(os.path.abspath(args.write_users)), exist_ok=True)
         with open(args.write_users, "w", newline="") as f:
-            w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank", "last_played", "dump"])
+            w = csv.writer(f); w.writerow(["user_id", "pp", "hours", "rank", "last_played", "dump", "acc"])
             for u, p in players.items():
-                w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"], p.get("last_played", ""), p.get("dump", "")])
+                w.writerow([u, round(p["pp"], 2), round(p["hours"], 4), p["rank"], p.get("last_played", ""), p.get("dump", ""), p.get("acc", "")])
         with open(args.write_users + ".sources.json", "w") as f:
             json.dump(sources, f)
 
@@ -331,7 +381,12 @@ def main():
     ow = {"minHours": OW_MIN_H, "activeDays": OW_DAYS if known else None, "n": len(ow_pp),
           "lpp": [round(math.log(x), 4) for x in ow_pp]}
     print(f"Overwatch group: {len(ow_pp):,} players with {OW_MIN_H}+ hours" + (f" who played in the last {OW_DAYS} days" if known else " (no last-played data)"))
+    acc = accuracy_table(players)
+    if acc:
+        print(f"accuracy: {acc['n']:,} players; median at 1,000 pp {np.interp(math.log(1000), [r[0] for r in acc['tab']], [r[1 + acc['q'].index(50)] for r in acc['tab']]):.2f}%")
     check = self_check(lh, lp)
+    if acc:
+        check["accWorst"] = accuracy_check(players)
     print(f"self-check (held-out): {check['in68']}% inside the 68% band, {check['in95']}% inside the 95% band, "
           f"{check['below']}% below the median; worst play-time bracket off by {check['worstBin']} points")
     model = {
@@ -347,6 +402,7 @@ def main():
         "rq": kernel_quantiles(lp2, rev_res, rev),
         "check": check,
         "ow": ow,
+        "acc": acc,
         "pts0": [[round(float(h), 3), round(float(p), 1)] for h, p in zip(H0, PP0)],
         "hMin": round(float(H.min()), 3), "hMax": round(float(H.max()), 1),
         "thin": round(float(np.percentile(H, 98)), 1),
