@@ -809,9 +809,9 @@ function accPct(pp, a) {                              // % of players at this pp
 const accTile = pp => {
   if (!ACC) return "";
   const typ = accRow(pp)[ACC.q.indexOf(50)];
-  if (state.acc == null) return `<div class="tile wide"><dt>Accuracy</dt><dd>—</dd><div class="note">add your Hit Accuracy above to compare · typical at your pp: ${fmt(typ, 1)}%</div></div>`;
+  if (state.acc == null) return `<div class="tile wide"><dt>Accuracy</dt><dd>—</dd><div class="note">add yours above · typical at your pp ${fmt(typ, 1)}%</div></div>`;
   const p = accPct(pp, state.acc), txt = p < 1 ? "under 1" : p > 99 ? "over 99" : fmt(p, 1);
-  return `<div class="tile wide"><dt>Accuracy</dt><dd class="blue">${fmt(state.acc, 2)}%</dd><div class="note">better than ${txt}% of players at your pp · typical there: ${fmt(typ, 1)}%</div></div>`;
+  return `<div class="tile wide"><dt>Accuracy</dt><dd class="blue">${fmt(state.acc, 2)}%</dd><div class="note"><b style="color:#fff">better than ${txt}%</b> at your pp · typical ${fmt(typ, 1)}%</div></div>`;
 };
 const owPill = pp => { const o = owRank(owAbove(pp)); return `<span class="owr" style="--oc:${o.col}" title="Overwatch equivalent">${o.name} ${o.div}</span>`; };
 const owTile = pp => { const o = owRank(owAbove(pp));
