@@ -885,7 +885,8 @@ function renderProj() {
   $("proj-pp").innerHTML = `~${fmt(k)}<small> pp</small>`;
   $("proj-rank").innerHTML = `${rk.text} ${starPill(k)} ${owPill(k)}`;
   $("proj-rank-note").textContent = "rank on today's leaderboard";
-  $("proj-meta").innerHTML = `<span>+${fmt(k - pp)} pp from now</span><span><i>range</i> ${fmt(l)}–${fmt(u)} pp</span><span><i>rank range</i> ${rankOf(u).text.replace("top ", "")}–${rankOf(l).text.replace("~", "")}</span>${Ht > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
+  const btNow = compare(H, pp).pct, btThen = compare(Ht, k).pct;
+  $("proj-meta").innerHTML = `<span><i>better than</i> <b style="color:#fff">${fmt(btThen, 1)}%</b> <i>of players at ${dh(Ht)} (now ${fmt(btNow, 1)}%)</i></span><span>+${fmt(k - pp)} pp from now</span><span><i>range</i> ${fmt(l)}–${fmt(u)} pp</span><span><i>rank range</i> ${rankOf(u).text.replace("top ", "")}–${rankOf(l).text.replace("~", "")}</span>${Ht > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
   $("proj-val").innerHTML = `${dh(Ht)}<small>${fmt(Ht)} h</small><small>+${dh(Ht - H)} from now</small>`;
   const goal = MILESTONES.find(m => m > pp * 1.03);
   if (goal) {
