@@ -172,6 +172,8 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .ins .grp { display: grid; grid-template-columns: 9.5em 1fr 3.4em; gap: 4px 10px; align-items: center; font: 900 14px var(--f); color: #fff; padding: 8px 0 2px; border-top: 1px solid var(--line); }
 .ins .grp:first-of-type { border-top: 0; }
 .ins .grp .bar { height: 10px; }
+.ins .grp .sub { grid-column: 1 / -1; color: var(--muted); font: 600 12px var(--f); margin-top: -2px; }
+.ins .grp.weakg > span:first-child::before { content: "▲ "; color: var(--red); font-size: 10px; }
 .ins .grp.future { color: var(--muted); }
 .ins .grp small { display: block; font: 700 11px var(--f); color: var(--muted); }
 .ins .sk { padding-left: 14px; }
@@ -1237,16 +1239,10 @@ function renderInsights(I) {
   let h = "";
   // skill profile
   h += `<div><h4>Skill profile <small>vs ${I.peers.near} players at ${fmt(I.peers.ppRange[0])}–${fmt(I.peers.ppRange[1])} pp · bar = your percentile among them</small></h4>`;
-  const groups = [...new Set(I.skills.map(s => s.group || s.label))];
-  for (const g of groups) {
-    const subs = I.skills.filter(s => (s.group || s.label) === g), ps = subs.map(s => s.pct).filter(p => p != null);
-    const gp = ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null, fut = subs.every(s => s.future);
-    h += `<div class="grp ${fut ? "future" : ""}"><span>${g}${fut ? "<small>matters more past ~4–5k pp</small>" : ""}</span><span class="bar"><i style="width:${gp ?? 0}%;background:${fut ? "var(--muted)" : col(gp)}"></i></span><span class="num">${gp == null ? "—" : ord(gp)}</span></div>`;
-    for (const s of subs) {
-      const weak = I.weak.includes(s.key);
-      h += `<div class="sk ${weak ? "weak" : ""}"><span class="lab">${s.label}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${s.future ? "var(--muted)" : col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : ord(s.pct)}</span>
-        <span class="sub">you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
-    }
+  for (const s of I.skills) {                       // one row per skill; "future" ones (reading) grayed out at the bottom
+    const weak = I.weak.includes(s.key), name = s.group || s.label;
+    h += `<div class="grp ${s.future ? "future" : ""} ${weak ? "weakg" : ""}"><span>${name}${s.future ? "<small>matters more past ~4–5k pp</small>" : ""}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${s.future ? "var(--muted)" : col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : ord(s.pct)}</span>
+      <span class="sub">${s.group && s.group !== s.label ? esc(s.label) + ": " : ""}you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
   }
   h += `</div>`;
   // weaknesses + what to play

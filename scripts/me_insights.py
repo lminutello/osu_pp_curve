@@ -74,13 +74,15 @@ AXES = [  # group, key, label, unit, which way is better, what a weak value mean
     ("Speed", "speed", "Streams (speed ÷ aim)", "ratio", 1, "your top maps are jump maps; streams and fast tapping are barely trained"),
     ("Stamina", "length", "Map length", "sec", 1, "your top plays are short; long maps test stamina and recovering from mistakes"),
     ("Consistency", "consistency", "Full combos", "pct", 1, "more of your top plays have misses than peers'"),
-    ("Consistency", "chokes", "Lost to 1–3 misses", "pct", -1, "more of your top plays are lost to a few misses than peers'"),
     ("Accuracy", "accuracy", "Accuracy", "acc", 1, "your accuracy on top plays trails peers'"),
-    ("Range", "stars", "Difficulty played", "stars", 1, "your top plays are easier maps than peers' at your pp"),
-    ("Range", "variety", "Mapper variety", "pct", 1, "your top plays come from few mappers; skills from one style may not transfer"),
+    ("Difficulty played", "stars", "Star rating of top plays", "stars", 1, "your top plays are easier maps than peers' at your pp"),
+    ("Mapper variety", "variety", "Different mappers in top plays", "pct", 1, "your top plays come from few mappers"),
     ("Reading", "reading", "High AR (9.6+)", "pct", 1, "few plays at high approach rate; fast reading is untrained"),
 ]
 FUTURE = {"reading"}                                        # shown, but not flagged or used for recommendations yet
+# which weaknesses get map recommendations, in this order (mapper variety is shown but gets none: every
+# recommendation is already a map you've never played, so a "new mappers" list just repeated the others)
+REC_ORDER = ["speed", "length", "stars", "aim", "consistency", "accuracy"]
 
 REC_TYPES = {
     "aim": ("Bigger jumps", lambda p, a, my: a["aim_difficulty"] >= my["aim_hi"]),
@@ -180,8 +182,6 @@ def main():
                        "peerP25": vals[len(vals) // 4] if vals else None, "peerP75": vals[3 * len(vals) // 4] if vals else None,
                        "pct": pct, "why": why})
     weak = [s for s in sorted(skills, key=lambda s: s["pct"] if s["pct"] is not None else 50) if s["pct"] is not None and s["pct"] <= 35 and not s["future"]][:4]
-    if {"consistency", "chokes"} <= {s["key"] for s in weak}:     # same fix for both: keep one
-        weak = [s for s in weak if s["key"] != "chokes"]
     strong = [s for s in sorted(skills, key=lambda s: -(s["pct"] or 0)) if (s["pct"] or 0) >= 65 and not s["future"]][:3]
 
     # recommendation pool: peers' top plays (near and a step ahead) with difficulty attributes
@@ -198,7 +198,9 @@ def main():
     my = {"aim_hi": my_aim[int(len(my_aim) * 0.75)], "played": played, "mappers": {p.get("mapper") for p in best[:50]},
           "stars_lo": my_stars[len(my_stars) // 4], "stars_med": stats.median(my_stars), "stars_hi": my_stars[int(len(my_stars) * 0.9)]}
     used = set()                                         # each map is recommended once
-    recs = [dict(recs_for(s["key"], mine, my, pool, used), why=s["why"]) for s in weak] or [recs_for("stars", mine, my, pool, used)]
+    rec_keys = [k for k in REC_ORDER if k in {s["key"] for s in weak}] or ["stars"]
+    why = {s["key"]: s["why"] for s in skills}
+    recs = [dict(recs_for(k, mine, my, pool, used), why=why[k]) for k in rec_keys]
 
     # trend: hardest aim / speed among top plays set each week
     weeks = defaultdict(list)
