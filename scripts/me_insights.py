@@ -169,6 +169,33 @@ def sessions(plays):
     return out
 
 
+SKILLS_HIST = D("me_skills_history.json")   # one skill snapshot per pull where play time changed, kept forever (tiny)
+
+
+def record_skills(ins, hours, pp):
+    """Add today's skill rows to the skill history, so the site's progress slider can show your skills back then."""
+    if not hours:
+        return
+    hist = {"user": ins.get("user"), "points": []}
+    if os.path.exists(SKILLS_HIST):
+        with open(SKILLS_HIST) as f:
+            hist = json.load(f)
+    if hist.get("user") != ins.get("user"):
+        hist = {"user": ins.get("user"), "points": []}
+    r = lambda v: None if v is None else round(v, 4)
+    snap = {"at": ins.get("at"), "h": round(hours, 3), "pp": round(pp or 0, 1),
+            "peers": [ins["peers"]["near"], *ins["peers"]["ppRange"]], "weak": ins.get("weak", []),
+            "s": {s["key"]: [r(s["you"]), s["pct"], r(s["peerMedian"]), r(s["peerP25"]), r(s["peerP75"])] for s in ins["skills"]}}
+    pts = hist["points"]
+    if pts and abs(pts[-1]["h"] - snap["h"]) < 1e-3:
+        pts[-1] = snap                                     # no new play time: today's numbers replace the last ones
+    else:
+        pts.append(snap)
+    pts.sort(key=lambda p: p["h"])
+    with open(SKILLS_HIST, "w") as f:
+        json.dump(hist, f, separators=(",", ":"))
+
+
 def main():
     with open(D("me_plays.json")) as f:
         me = json.load(f)
@@ -260,6 +287,8 @@ def main():
                      "peerMomentum": med([q["momentum"] for q in near]), "peerDt": med([q["dt"] for q in near]), "peerHd": med([q["hd"] for q in near])}}
     with open(D("me_insights.json"), "w") as f:
         json.dump(out, f, separators=(",", ":"))
+    prof = me.get("profile") or {}
+    record_skills(out, prof.get("hours"), prof.get("pp"))
     print("weak:", out["weak"], "strong:", out["strong"], "recs:", [(r["type"], len(r["maps"])) for r in recs])
 
 

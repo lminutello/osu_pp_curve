@@ -12,7 +12,7 @@ What it trims (limits at the top of the file):
   data/me_plays.json       difficulty-attribute cache entries no current top play or peer play uses (they'd simply be
                            looked up again if needed)
 
-Never touched: your progress points (data/me_history.json, tiny and kept forever), the model, ranks, histories
+Never touched: your progress points and skill snapshots (data/me_history.json, data/me_skills_history.json; tiny, kept forever), the model, ranks, histories
 used for star level, and git history (old versions stay in the repo's history either way).
 
 Usage:  python scripts/trim_data.py [--dry-run]

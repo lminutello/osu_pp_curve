@@ -175,6 +175,8 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .ins .grp .sub { grid-column: 1 / -1; color: var(--muted); font: 600 12px var(--f); margin-top: -2px; }
 .ins .grp.weakg > span:first-child::before { content: "▲ "; color: var(--red); font-size: 10px; }
 .ins .grp.future { color: var(--muted); }
+.ins .grp.na { color: var(--muted); opacity: .5; }
+.ins .skills-note { font: 700 12px var(--f); color: var(--mine); margin: -2px 0 4px; }
 .ins .grp small { display: block; font: 700 11px var(--f); color: var(--muted); }
 .ins .sk { padding-left: 14px; }
 .ins .sk .lab { font-size: 12.5px; }
@@ -581,6 +583,7 @@ function parseRank(raw) {
 // ---------- state
 const $ = id => document.getElementById(id);
 let MINE = null;                                      // "my progress" history, loaded below
+let INS = null, SKH = null, renderSkills = () => {};  // insights, skill snapshots over time, and the skill rows (follow the progress slider)
 const state = { acc: null, log: true, you: null, estH: 100, proj: false, trend: false, mine: false, mineT: 1, projExtra: 150, rank: null, Ncal: null };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -1228,6 +1231,7 @@ function renderMine() {
     `<span style="color:var(--mine)">${src}${when}</span>`;
   $("mine-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small><small>${now[0] - H < 0.05 ? "now" : `−${dh(now[0] - H)} from now`}</small>`;
   $("mine-slider").value = Math.round(state.mineT * 1000);
+  renderSkills();
 }
 // ---------- insights: data/me_insights.json, rebuilt after every daily pull by scripts/me_insights.py
 function renderInsights(I) {
@@ -1237,14 +1241,8 @@ function renderInsights(I) {
   const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"));
   const col = p => p == null ? "var(--muted)" : p < 35 ? "var(--red)" : p < 65 ? "var(--gold)" : "var(--mine)";
   let h = "";
-  // skill profile
-  h += `<div><h4>Skill profile <small>vs ${I.peers.near} players at ${fmt(I.peers.ppRange[0])}–${fmt(I.peers.ppRange[1])} pp · bar = your percentile among them</small></h4>`;
-  for (const s of I.skills) {                       // one row per skill; "future" ones (reading) grayed out at the bottom
-    const weak = I.weak.includes(s.key), name = s.group || s.label;
-    h += `<div class="grp ${s.future ? "future" : ""} ${weak ? "weakg" : ""}"><span>${name}${s.future ? "<small>matters more past ~4–5k pp</small>" : ""}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${s.future ? "var(--muted)" : col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : ord(s.pct)}</span>
-      <span class="sub">${s.group && s.group !== s.label ? esc(s.label) + ": " : ""}you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
-  }
-  h += `</div>`;
+  // skill profile: its own box, redrawn when the progress slider moves (skill snapshots are kept at every daily pull)
+  h += `<div id="mine-skills"></div>`;
   // weaknesses + what to play
   if (I.recs && I.recs.length) {
     h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played · each stays until you play it (or ~2 months)</small></h4><div style="display:grid;gap:10px">`;
@@ -1291,8 +1289,30 @@ function renderInsights(I) {
     <span><i>top plays over 2 min</i> ${fmt(100 * X.longShare)}%</span></div></div>`;
   h += `<div style="font-size:11.5px;color:var(--muted);font-weight:600">Updated after each daily pull (${I.at ? new Date(I.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}); peers re-picked weekly. Aim and speed are osu!'s own aim and speed difficulty of your top 25 maps (the two parts of star rating).</div>`;
   el.innerHTML = h; el.hidden = false;
+  INS = I;
+  renderSkills = () => {
+    const box = $("mine-skills"); if (!box) return;
+    const pts = (SKH && SKH.points) || [], now = !MINE || mineH() >= MINE.path[MINE.path.length - 1][0] - 0.01;
+    let snap = null;                                // the latest snapshot at or before the slider's point
+    if (!now) { const H = mineH(); for (const p of pts) if (p.h <= H + 0.01) snap = p; }
+    const na = !now && !snap, day = t => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const val = (s, i) => now ? [s.you, s.pct, s.peerMedian, s.peerP25, s.peerP75][i] : snap && snap.s[s.key] ? snap.s[s.key][i] : null;
+    const weakKeys = now ? I.weak : snap ? snap.weak || [] : [];
+    const pr = now ? [I.peers.near, ...I.peers.ppRange] : snap ? snap.peers : null;
+    let b = `<h4>Skill profile <small>${pr ? `vs ${pr[0]} players at ${fmt(pr[1])}–${fmt(pr[2])} pp · ` : ""}bar = your percentile among them</small></h4>`;
+    if (!now) b += `<div class="skills-note">${na ? `No skill data this far back: tracking started ${pts.length ? `${day(pts[0].at)} (${fmt(pts[0].h)} h)` : "recently"}.`
+      : `As of ${day(snap.at)} · ${fmt(snap.h)} h · ${fmt(snap.pp)} pp`}</div>`;
+    for (const s of I.skills) {                     // one row per skill; "future" ones (reading) grayed out at the bottom
+      const pct = val(s, 1), weak = weakKeys.includes(s.key), name = s.group || s.label;
+      b += `<div class="grp ${s.future ? "future" : ""} ${na ? "na" : ""} ${weak ? "weakg" : ""}"><span>${name}${s.future ? "<small>matters more past ~4–5k pp</small>" : ""}</span><span class="bar"><i style="width:${pct ?? 0}%;background:${s.future ? "var(--muted)" : col(pct)}"></i></span><span class="num">${na ? "n/a" : pct == null ? "—" : ord(pct)}</span>
+        <span class="sub">${s.group && s.group !== s.label ? esc(s.label) + ": " : ""}${na ? "n/a" : `you ${f(s.unit, val(s, 0))} · peers ${f(s.unit, val(s, 2))} (middle half ${f(s.unit, val(s, 3))}–${f(s.unit, val(s, 4))})`}</span></div>`;
+    }
+    box.innerHTML = b;
+  };
+  renderSkills();
 }
 fetch("data/me_insights.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(I => { if (I && I.skills) renderInsights(I); });
+fetch("data/me_skills_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(h => { SKH = h; renderSkills(); });
 fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(hist => {
   const rec = (hist && hist.points || []).filter(p => p[1] >= 1 && p[2] > 0).sort((x, y) => x[1] - y[1]);
   if (rec.length < 2) return;
