@@ -15,6 +15,11 @@ from me_plays import Api, play, attributes  # noqa: E402
 from me_insights import AXES, profile, D     # noqa: E402
 
 
+OUT = []
+def say(line=""):
+    print(line); OUT.append(line)
+
+
 def main():
     who = (os.environ.get("COMPARE_USER") or "").strip()
     if not who:
@@ -52,16 +57,18 @@ def main():
 
     fmt = {"num": "{:.2f}", "sec": "{:.0f}s", "pct": lambda v: f"{100 * v:.0f}%", "acc": "{:.2f}%", "stars": "{:.2f}★"}
     show = lambda unit, v: "—" if v is None else (fmt[unit](v) if callable(fmt[unit]) else fmt[unit].format(v))
-    print(f"\n{u['username']}: {st.get('pp'):.0f} pp, {(st.get('play_time') or 0) / 3600:.0f} h, rank #{st.get('global_rank')}")
-    print(f"{me['username']}: {me['profile']['pp']:.0f} pp, {me['profile']['hours']:.0f} h")
-    print(f"(percentiles vs {len(near)} players near {me['username']}'s pp)\n")
-    print(f"{'skill':20}{u['username']:>22}{me['username']:>22}")
+    say(f"\n{u['username']}: {st.get('pp'):.0f} pp, {(st.get('play_time') or 0) / 3600:.0f} h, rank #{st.get('global_rank')}")
+    say(f"{me['username']}: {me['profile']['pp']:.0f} pp, {me['profile']['hours']:.0f} h")
+    say(f"(percentiles vs {len(near)} players near {me['username']}'s pp)\n")
+    say(f"{'skill':20}{u['username']:>22}{me['username']:>22}")
     for group, key, label, unit, better, why in AXES:
-        print(f"{group:20}{show(unit, them.get(key)) + ' (' + pct(key, them.get(key)) + ')':>22}"
+        say(f"{group:20}{show(unit, them.get(key)) + ' (' + pct(key, them.get(key)) + ')':>22}"
               f"{show(unit, mine.get(key)) + ' (' + pct(key, mine.get(key)) + ')':>22}")
-    print(f"{'HD in top 50':20}{100 * them['hd']:>21.0f}%{100 * mine['hd']:>21.0f}%")
-    print(f"{'DT in top 50':20}{100 * them['dt']:>21.0f}%{100 * mine['dt']:>21.0f}%")
+    say(f"{'HD in top 50':20}{100 * them['hd']:>21.0f}%{100 * mine['hd']:>21.0f}%")
+    say(f"{'DT in top 50':20}{100 * them['dt']:>21.0f}%{100 * mine['dt']:>21.0f}%")
 
 
 if __name__ == "__main__":
     main()
+    if os.environ.get("GITHUB_ACTIONS"):                    # also as a run annotation, readable without the log
+        print("::notice title=Skill comparison::" + "%0A".join(l.replace("%", "%25") for l in OUT))
