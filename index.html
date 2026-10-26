@@ -169,6 +169,28 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .ins .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; }
 .ins .sk .num { text-align: right; font-variant-numeric: tabular-nums; }
 .ins .sk .sub { grid-column: 1 / -1; color: var(--muted); font-size: 12px; font-weight: 600; margin-top: -2px; }
+.ins .grp { display: grid; grid-template-columns: 9.5em 1fr 3.4em; gap: 4px 10px; align-items: center; font: 900 14px var(--f); color: #fff; padding: 8px 0 2px; border-top: 1px solid var(--line); }
+.ins .grp:first-of-type { border-top: 0; }
+.ins .grp .bar { height: 10px; }
+.ins .grp.future { color: var(--muted); }
+.ins .grp small { display: block; font: 700 11px var(--f); color: var(--muted); }
+.ins .sk { padding-left: 14px; }
+.ins .sk .lab { font-size: 12.5px; }
+.rec { --rc: var(--mine); background: var(--bg-2); border: 1px solid var(--line); border-left: 4px solid var(--rc); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.rec-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rec-h b { font: 900 15px var(--f); color: var(--rc); }
+.rec-h span { font-size: 11.5px; font-weight: 800; color: var(--muted); }
+.rec-why { font-size: 12.5px; font-weight: 600; color: var(--fg-2); margin-top: -4px; }
+.rmaps { display: grid; gap: 6px; }
+.rmap { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface); text-decoration: none; color: inherit; border: 1px solid transparent; transition: border-color .15s; }
+.rmap:hover { border-color: var(--rc); }
+.rmap .song { font: 800 13.5px var(--f); color: #fff; overflow-wrap: anywhere; }
+.rmap .diff { grid-column: 1; font-size: 12px; font-weight: 700; color: var(--muted); overflow-wrap: anywhere; }
+.rmap .who { grid-row: 1 / span 2; grid-column: 2; align-self: center; font: 900 12px var(--f); color: var(--rc); text-align: right; line-height: 1.15; }
+.rmap .who small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 700; }
+.chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.chips i { font-style: normal; font-size: 11.5px; font-weight: 800; color: var(--fg-2); background: var(--bg-2); border-radius: 99px; padding: 2px 8px; }
+.chips i.hot { background: color-mix(in srgb, var(--rc) 22%, transparent); color: var(--rc); }
 .ins .card2 { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
 .ins .card2 b { color: #fff; }
 .ins .map { display: grid; gap: 1px; font-size: 13px; font-weight: 700; padding: 6px 0; border-top: 1px dashed var(--line); }
@@ -1208,30 +1230,41 @@ function renderMine() {
 // ---------- insights: data/me_insights.json, rebuilt after every daily pull by scripts/me_insights.py
 function renderInsights(I) {
   const el = $("mine-ins"), esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const f = (u, v) => v == null ? "—" : u === "ratio" ? fmt(v, 2) : u === "sec" ? `${fmt(v)} s` : u === "pct" ? `${fmt(100 * v)}%` : u === "acc" ? `${fmt(v, 2)}%` : `★${fmt(v, 2)}`;
+  const f = (u, v) => v == null ? "—" : u === "ratio" || u === "num" ? fmt(v, 2) : u === "sec" ? `${fmt(v)} s` : u === "pct" ? `${fmt(100 * v)}%` : u === "acc" ? `${fmt(v, 2)}%` : `★${fmt(v, 2)}`;
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
   const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"));
   const col = p => p == null ? "var(--muted)" : p < 35 ? "var(--red)" : p < 65 ? "var(--gold)" : "var(--mine)";
   let h = "";
   // skill profile
   h += `<div><h4>Skill profile <small>vs ${I.peers.near} players at ${fmt(I.peers.ppRange[0])}–${fmt(I.peers.ppRange[1])} pp · bar = your percentile among them</small></h4>`;
-  for (const s of I.skills) {
-    const weak = I.weak.includes(s.key);
-    h += `<div class="sk ${weak ? "weak" : ""}"><span class="lab">${s.label}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : ord(s.pct)}</span>
-      <span class="sub">you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
+  const groups = [...new Set(I.skills.map(s => s.group || s.label))];
+  for (const g of groups) {
+    const subs = I.skills.filter(s => (s.group || s.label) === g), ps = subs.map(s => s.pct).filter(p => p != null);
+    const gp = ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null, fut = subs.every(s => s.future);
+    h += `<div class="grp ${fut ? "future" : ""}"><span>${g}${fut ? "<small>matters more past ~4–5k pp</small>" : ""}</span><span class="bar"><i style="width:${gp ?? 0}%;background:${fut ? "var(--muted)" : col(gp)}"></i></span><span class="num">${gp == null ? "—" : ord(gp)}</span></div>`;
+    for (const s of subs) {
+      const weak = I.weak.includes(s.key);
+      h += `<div class="sk ${weak ? "weak" : ""}"><span class="lab">${s.label}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${s.future ? "var(--muted)" : col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : ord(s.pct)}</span>
+        <span class="sub">you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
+    }
   }
   h += `</div>`;
   // weaknesses + what to play
   if (I.recs && I.recs.length) {
     h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played</small></h4><div style="display:grid;gap:10px">`;
+    const RC = { length: ["var(--purple)", "length"], speed: ["var(--blue)", "bpm"], variety: ["var(--gold)", "mapper"], stars: ["var(--pink)", "stars"],
+      aim: ["#ff9b6a", "stars"], consistency: ["var(--mine)", "len"], chokes: ["var(--mine)", "len"], accuracy: ["var(--mine)", "od"], reading: ["var(--blue)", "ar"] };
     for (const r of I.recs) {
-      const sk = I.skills.find(s => s.key === r.key);
-      h += `<div class="card2"><div><b>${esc(r.type)}</b> <span style="color:var(--muted);font-size:12px;font-weight:700">· ★${r.stars[0]}–${r.stars[1]}</span></div>`;
-      if (r.why && sk) h += `<div style="font-size:12.5px;font-weight:600;color:var(--fg-2)">${esc(sk.label)}: ${esc(r.why)} (${ord(sk.pct)} percentile).</div>`;
-      h += r.maps.length ? r.maps.map(m => `<div class="map"><a href="https://osu.ppy.sh/b/${m.map}" target="_blank" rel="noopener">${esc(m.title)}${m.mods.length ? " +" + m.mods.join("") : ""}</a>
-        <span>★${m.stars} · ${mmss(m.length)} · ${m.bpm} BPM · AR ${m.ar} · mapped by ${esc(m.mapper)} · in ${m.peers} similar player${m.peers > 1 ? "s'" : "'s"} top plays</span></div>`).join("")
-        : `<div style="font-size:12.5px;color:var(--muted)">No fitting maps among peers' top plays yet; it fills in as more peers are pulled.</div>`;
-      h += `</div>`;
+      const sk = I.skills.find(s => s.key === r.key), [c, hot] = RC[r.key] || ["var(--mine)", ""];
+      h += `<div class="rec" style="--rc:${c}"><div class="rec-h"><b>${esc(r.type)}</b><span>★${r.stars[0]}–${r.stars[1]}${sk ? ` · your ${esc(sk.label.toLowerCase())}: ${ord(sk.pct)} percentile` : ""}</span></div>`;
+      if (r.why) h += `<div class="rec-why">Why: ${esc(r.why)}.</div>`;
+      h += `<div class="rmaps">` + (r.maps.length ? r.maps.map(m => {
+        const t = m.title || "", k = t.lastIndexOf(" ["), song = k > 0 ? t.slice(0, k) : t, diff = k > 0 ? t.slice(k + 2, -1) : "";
+        const chip = (key, txt) => `<i class="${hot === key ? "hot" : ""}">${txt}</i>`;
+        return `<a class="rmap" href="https://osu.ppy.sh/b/${m.map}" target="_blank" rel="noopener"><span class="song">${esc(song)}</span>
+          <span class="who">${m.peers}<small>similar<br>player${m.peers > 1 ? "s" : ""}</small></span><span class="diff">[${esc(diff)}]${m.mods.length ? " +" + m.mods.join("") : ""} · ${esc(m.mapper)}</span>
+          <span class="chips">${chip("stars", "★" + m.stars)}${chip("length", mmss(m.length))}${chip("bpm", m.bpm + " BPM")}${chip("ar", "AR " + m.ar)}${hot === "mapper" ? chip("mapper", "new mapper") : ""}</span></a>`;
+      }).join("") : `<div style="font-size:12.5px;color:var(--muted)">No fitting maps among peers' top plays yet; it fills in as more peers are pulled.</div>`) + `</div></div>`;
     }
     h += `</div></div>`;
   }

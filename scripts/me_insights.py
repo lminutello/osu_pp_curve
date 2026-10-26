@@ -53,6 +53,8 @@ def profile(best, now):
     m = lambda p: set(p.get("mods") or [])
     length = [(p.get("length") or 0) / rate(m(p)) for p in b50]
     return {
+        "aim": med([p["attr"]["aim_difficulty"] for p in b25]),
+        "chokes": sum(1 for p in b50 if 1 <= (p.get("miss") or 0) <= 3) / len(b50),
         "speed": med([p["attr"]["speed_difficulty"] / p["attr"]["aim_difficulty"] for p in b25]),   # higher = more streamy
         "length": med(length),
         "reading": sum(1 for p in b50 if (eff_ar(p.get("ar"), m(p)) or 0) >= 9.6) / len(b50),
@@ -67,21 +69,26 @@ def profile(best, now):
     }
 
 
-AXES = [  # key, label, how to show it, what a low value means
-    ("speed", "Speed / streams", "ratio", "your top maps are jump maps; streams and fast tapping are barely trained"),
-    ("length", "Stamina / length", "sec", "your top plays are short; long maps test stamina and recovering from mistakes"),
-    ("reading", "Reading (AR 9.6+)", "pct", "few plays at high approach rate; fast reading is untrained"),
-    ("consistency", "Consistency (FCs)", "pct", "more of your top plays have misses than peers'"),
-    ("accuracy", "Accuracy", "acc", "your accuracy on top plays trails peers'"),
-    ("variety", "Variety (mappers)", "pct", "your top plays come from few mappers; skills from one style may not transfer"),
-    ("stars", "Difficulty played", "stars", "your top plays are easier maps than peers' at your pp"),
+AXES = [  # group, key, label, unit, which way is better, what a weak value means
+    ("Aim", "aim", "Jump difficulty", "num", 1, "the jumps in your top plays are easier than peers'"),
+    ("Speed", "speed", "Streams (speed ÷ aim)", "ratio", 1, "your top maps are jump maps; streams and fast tapping are barely trained"),
+    ("Stamina", "length", "Map length", "sec", 1, "your top plays are short; long maps test stamina and recovering from mistakes"),
+    ("Consistency", "consistency", "Full combos", "pct", 1, "more of your top plays have misses than peers'"),
+    ("Consistency", "chokes", "Lost to 1–3 misses", "pct", -1, "more of your top plays are lost to a few misses than peers'"),
+    ("Accuracy", "accuracy", "Accuracy", "acc", 1, "your accuracy on top plays trails peers'"),
+    ("Range", "stars", "Difficulty played", "stars", 1, "your top plays are easier maps than peers' at your pp"),
+    ("Range", "variety", "Mapper variety", "pct", 1, "your top plays come from few mappers; skills from one style may not transfer"),
+    ("Reading", "reading", "High AR (9.6+)", "pct", 1, "few plays at high approach rate; fast reading is untrained"),
 ]
+FUTURE = {"reading"}                                        # shown, but not flagged or used for recommendations yet
 
 REC_TYPES = {
+    "aim": ("Bigger jumps", lambda p, a, my: a["aim_difficulty"] >= my["aim_hi"]),
     "speed": ("Stream maps", lambda p, a, my: a["speed_difficulty"] / a["aim_difficulty"] >= 0.8 and (p.get("bpm") or 0) * rate(set(p.get("mods") or [])) >= 160),
     "length": ("Longer maps (2–4 min)", lambda p, a, my: (p.get("length") or 0) / rate(set(p.get("mods") or [])) >= 120),
     "reading": ("High-AR / DT maps", lambda p, a, my: (eff_ar(p.get("ar"), set(p.get("mods") or [])) or 0) >= 9.6),
     "consistency": ("Long-combo maps to FC", lambda p, a, my: (a.get("max_combo") or 0) >= 500),
+    "chokes": ("Long-combo maps to FC", lambda p, a, my: (a.get("max_combo") or 0) >= 500),
     "accuracy": ("High-OD maps", lambda p, a, my: (p.get("od") or 0) >= 8.7),
     "variety": ("New mappers' styles", lambda p, a, my: p.get("mapper") not in my["mappers"]),
     "stars": ("A step harder", lambda p, a, my: True),
@@ -163,14 +170,19 @@ def main():
     mine = profile(best, now)
     near = [q for q in (profile(p["best"], now) for p in peers.get("players", []) if p["group"] == "near") if q]
     skills = []
-    for key, label, unit, why in AXES:
+    for group, key, label, unit, better, why in AXES:
         vals = sorted(q[key] for q in near if q.get(key) is not None)
-        pct = round(100 * (sum(v < mine[key] for v in vals) + 0.5 * sum(v == mine[key] for v in vals)) / len(vals)) if vals and mine.get(key) is not None else None
-        skills.append({"key": key, "label": label, "unit": unit, "you": mine.get(key), "peerMedian": med(vals),
+        pct = None
+        if vals and mine.get(key) is not None:
+            below = sum(v < mine[key] for v in vals) if better > 0 else sum(v > mine[key] for v in vals)
+            pct = round(100 * (below + 0.5 * sum(v == mine[key] for v in vals)) / len(vals))
+        skills.append({"group": group, "key": key, "label": label, "unit": unit, "future": key in FUTURE, "you": mine.get(key), "peerMedian": med(vals),
                        "peerP25": vals[len(vals) // 4] if vals else None, "peerP75": vals[3 * len(vals) // 4] if vals else None,
                        "pct": pct, "why": why})
-    weak = [s for s in sorted(skills, key=lambda s: s["pct"] if s["pct"] is not None else 50) if s["pct"] is not None and s["pct"] <= 35][:4]
-    strong = [s for s in sorted(skills, key=lambda s: -(s["pct"] or 0)) if (s["pct"] or 0) >= 65][:3]
+    weak = [s for s in sorted(skills, key=lambda s: s["pct"] if s["pct"] is not None else 50) if s["pct"] is not None and s["pct"] <= 35 and not s["future"]][:4]
+    if {"consistency", "chokes"} <= {s["key"] for s in weak}:     # same fix for both: keep one
+        weak = [s for s in weak if s["key"] != "chokes"]
+    strong = [s for s in sorted(skills, key=lambda s: -(s["pct"] or 0)) if (s["pct"] or 0) >= 65 and not s["future"]][:3]
 
     # recommendation pool: peers' top plays (near and a step ahead) with difficulty attributes
     pool = {}
@@ -182,7 +194,8 @@ def main():
             c["who"].add(p["id"]); c["ahead"] += p["group"] == "ahead"
     my_stars = sorted(p["attr"]["star_rating"] for p in best[:50] if p.get("attr") and p["attr"].get("star_rating"))
     played = {p["map"] for p in best} | {m["map"] for m in me.get("most_played", [])} | {p["map"] for p in log} | {p["map"] for p in me.get("recent", [])}
-    my = {"played": played, "mappers": {p.get("mapper") for p in best[:50]},
+    my_aim = sorted(p["attr"]["aim_difficulty"] for p in best[:50] if p.get("attr") and p["attr"].get("aim_difficulty"))
+    my = {"aim_hi": my_aim[int(len(my_aim) * 0.75)], "played": played, "mappers": {p.get("mapper") for p in best[:50]},
           "stars_lo": my_stars[len(my_stars) // 4], "stars_med": stats.median(my_stars), "stars_hi": my_stars[int(len(my_stars) * 0.9)]}
     used = set()                                         # each map is recommended once
     recs = [dict(recs_for(s["key"], mine, my, pool, used), why=s["why"]) for s in weak] or [recs_for("stars", mine, my, pool, used)]
