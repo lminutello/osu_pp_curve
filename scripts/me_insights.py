@@ -75,7 +75,7 @@ AXES = [  # group, key, label, unit, which way is better, what a weak value mean
     ("Speed", "speed", "Speed difficulty", "num", 1, "the tapping in your top plays is easier than peers'; streams and fast tapping are barely trained"),
     ("Stamina", "length", "Map length", "sec", 1, "your top plays are short; long maps test stamina and recovering from mistakes"),
     ("Consistency", "consistency", "Full combos", "pct", 1, "more of your top plays have misses than peers'"),
-    ("Accuracy", "accuracy", "Accuracy", "acc", 1, "your accuracy on top plays trails peers'"),
+    ("Accuracy", "accuracy", "Hit accuracy (profile)", "acc", 1, "your accuracy trails peers'"),
     ("Difficulty played", "stars", "Star rating of top plays", "stars", 1, "your top plays are easier maps than peers' at your pp"),
     ("Mapper variety", "variety", "Different mappers in top plays", "pct", 1, "your top plays come from few mappers"),
     ("Reading", "reading", "High AR (9.6+)", "pct", 1, "few plays at high approach rate; fast reading is untrained"),
@@ -171,7 +171,13 @@ def main():
             peers = json.load(f)
 
     mine = profile(best, now)
-    near = [q for q in (profile(p["best"], now) for p in peers.get("players", []) if p["group"] == "near") if q]
+    near = []
+    for p in peers.get("players", []):
+        q = profile(p["best"], now) if p["group"] == "near" else None
+        if q:
+            q["accuracy"] = p.get("acc") or q["accuracy"]          # the profile's Hit Accuracy, like on the website
+            near.append(q)
+    mine["accuracy"] = (me.get("profile") or {}).get("acc") or mine["accuracy"]
     skills = []
     for group, key, label, unit, better, why in AXES:
         vals = sorted(q[key] for q in near if q.get(key) is not None)
