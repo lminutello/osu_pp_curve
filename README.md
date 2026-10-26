@@ -50,6 +50,7 @@ scripts/pull_histories.py          osu! API -> history.jsonl.gz
 .github/workflows/refresh-drift.yml       monthly, needs API secrets
 .github/workflows/update-me.yml           daily, needs API secrets: your stats, progress, play log, insights (peers weekly)
 .github/workflows/audit.yml               manual accuracy audit, needs API secrets
+.github/workflows/trim-data.yml           yearly (Jan 2): trims data that only grows (manual run = dry run by default)
 ```
 
 ## Setup (one time)

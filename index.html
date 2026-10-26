@@ -1068,6 +1068,7 @@ const WORKFLOWS = {                       // file name -> row it updates and how
   "refresh-histories.yml": { rows: ["row-hist", "row-snap"], label: "Pull more player histories (manual)", mins: "25+" },
   "refresh-ranks.yml": { rows: ["row-snap"], label: "Refresh ranks (weekly)", mins: "~40" },
   "refresh-drift.yml": { rows: ["row-snap"], label: "Refresh projection (monthly)", mins: "~40" },
+  "trim-data.yml": { rows: ["row-snap"], label: "Trim old data (yearly)", mins: "~1" },
 };
 let wasBusy = false, liveTimer = null;
 async function liveCheck() {

@@ -101,7 +101,8 @@ def pull_peers(api, cache, my_pp, my_id, n_near=40, n_ahead=20, top=25):
             for p in best[:top]:
                 p["attr"] = attributes(api, cache, p)
             keep = ("pp", "acc", "fc", "miss", "mods", "at", "map", "title", "mapper", "stars", "length", "bpm", "ar", "od", "cs", "attr")
-            best = [{k: p.get(k) for k in keep} for p in best]
+            slim = ("map", "mods", "at", "acc", "fc", "miss", "mapper", "length", "ar")   # all the skill profile needs past the top 25
+            best = [{k: p.get(k) for k in (keep if i < top else slim)} for i, p in enumerate(best)]
             out["players"].append({"id": pid, "group": group, "pp": st.get("pp"), "hours": round((st.get("play_time") or 0) / 3600, 1),
                                    "acc": st.get("hit_accuracy"), "plays": st.get("play_count"), "best": best})
             got += 1

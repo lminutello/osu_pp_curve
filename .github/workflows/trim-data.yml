@@ -1,0 +1,54 @@
+name: Trim old data (yearly)
+
+# Cuts data that only ever grows down to what the site still uses: dump archives and projection pairs older than
+# 3 years, your play log older than 2 years, and unused cached map difficulty data. Your progress points, the model,
+# ranks and the histories are never touched. Run it by hand with "dry run" to see what it would cut without changing
+# anything. Limits are at the top of scripts/trim_data.py.
+# Estimated time: under 1 minute.
+on:
+  schedule:
+    - cron: "29 5 2 1 *"      # 05:29 UTC on January 2nd
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would be cut (true/false)"
+        default: "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Trim
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" != "false" ]; then
+            python scripts/trim_data.py --dry-run
+          else
+            python scripts/trim_data.py
+          fi
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data/
+          if git diff --cached --quiet; then
+            echo "Nothing to trim."
+          else
+            git commit -m "Yearly data trim ($(date -u +%Y-%m-%d))"
+            git pull --rebase -q origin main
+            git push
+          fi
