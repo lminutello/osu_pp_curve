@@ -1,0 +1,39 @@
+name: Look up map difficulty (manual)
+
+# Looks up osu!'s aim/speed difficulty and map info for a list of beatmap IDs (e.g. to sort your song library into
+# collections). Saves to the "library" branch, not main, so the site isn't touched.
+# Estimated time: about 1 second per map (~6 minutes for 350 maps).
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "Beatmap IDs, comma-separated"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attrs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Look up maps
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+          MAP_IDS: ${{ inputs.ids }}
+        run: python scripts/map_attrs.py
+      - name: Save to the library branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mv library /tmp/library
+          git checkout -q --orphan library-tmp && git rm -rfq . && rm -rf .cache
+          mv /tmp/library library && git add library
+          git commit -qm "Map difficulty lookup ($(date -u +%Y-%m-%d))"
+          git push -f origin library-tmp:library
