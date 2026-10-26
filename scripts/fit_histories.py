@@ -3,6 +3,7 @@
 Turn pulled player histories into data/history_fit.json, which build_model.py merges into the site's model.
 
 Measures (from data/history.jsonl.gz, or any .jsonl given with --history):
+  top        typical pp of a player's best play at each total pp, fitted the same way
   stars      typical star rating of top plays at each total pp (median of each player's top 10 plays
              without DT/NC/HT/DC/HR/EZ/FL), fitted as ln(stars) = a + b ln(pp) + c ln(pp)^2
   drift      how fast a player's distance from the trend (z, in std devs) fades as they play:
@@ -125,6 +126,13 @@ def main():
     resid = np.log(S[:, 1]) - (a2 + b2 * np.log(S[:, 0]) + c2 * np.log(S[:, 0]) ** 2)
     print(f"stars: {len(S)} players, ln(stars) = {a2:.5f} + {b2:.5f} ln pp + {c2:.6f} ln^2 pp")
 
+    # ---- top play: each player's best play (any mods) against total pp, same quadratic in log space
+    T = np.array([(r["pp"], max(x["pp"] for x in r["scores"] if x.get("pp")))
+                  for r in recs if r.get("pp") and sum(1 for x in r.get("scores") or [] if x.get("pp")) >= 20])
+    c3, b3, a3 = np.polyfit(np.log(T[:, 0]), np.log(T[:, 1]), 2)
+    tres = np.log(T[:, 1]) - (a3 + b3 * np.log(T[:, 0]) + c3 * np.log(T[:, 0]) ** 2)
+    print(f"top play: {len(T)} players, ln(top) = {a3:.5f} + {b3:.5f} ln pp + {c3:.6f} ln^2 pp, spread {np.std(tres):.3f}")
+
     # ---- drift under several rebuild choices (12-month windows)
     variants = {}
     for bonus in ("plays", "scores", "const"):
@@ -172,6 +180,8 @@ def main():
         "players": len(recs),
         "stars": {"a": round(float(a2), 5), "b": round(float(b2), 5), "c": round(float(c2), 6), "n": len(S),
                   "spread": round(float(np.std(resid)), 3)},
+        "top": {"a": round(float(a3), 5), "b": round(float(b3), 5), "c": round(float(c3), 6), "n": len(T),
+                "spread": round(float(np.std(tres)), 3)},
         "drift": {"kappa": round(kappa, 3), "lo": round(k_lo, 3), "hi": round(k_hi, 3), "spread": round(spread, 3),
                   "variants": {k: round(v[0], 3) for k, v in variants.items()}},
         "pph": pph,

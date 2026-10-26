@@ -245,6 +245,8 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
   box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 12px -6px var(--sc); }
 .star.big { font-size: 20px; padding: 2px 12px 2px 10px; }
 .box-rank .star { color: var(--st); font-size: 14px; }
+.box-rank .topp { color: var(--fg-2); font-size: 13px; font-weight: 900; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.tile .topv { font: 900 20px var(--f); color: #fff; margin-left: 6px; white-space: nowrap; }
 .box-rank .owr { color: var(--oc); font-size: 13px; font-weight: 900; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--oc); white-space: nowrap; }   /* beat ".box-rank span" so the pill keeps its own text color */
 .box-rank strong { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .sw.projdot { width: 10px; height: 10px; background: #fff; border: 2px solid var(--proj); transform: rotate(45deg); border-radius: 2px; }
@@ -396,6 +398,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
     <p id="selfcheck" hidden></p>
     <p>Accuracy: your Hit Accuracy against players at about your pp, from the same dumps (the dumps' accuracy matches the profile's Hit Accuracy). Accuracy rises fast with pp, so only players very close to your pp are compared, and the comparison is rebuilt monthly.</p>
     <p>Star level: the median star rating of the top 10 plays (without DT, HR, EZ, HT or FL, which change a map's stars) for <span data-f="starsn">thousands of</span> real players from the osu! API, fitted as a curve in log space. Players at the same pp typically spread about ±<span data-f="starspread">8</span>% around it. DT players' level reads low because their DT plays are left out. Checked on players left out of the fit (Oct 2026), the curve was within 0.15★ of the real median in every pp bracket.</p>
+    <p>#1 play: the pp of each of <span data-f="topn">thousands of</span> real players' best play (any mods) against their total pp, fitted the same way. Players at the same pp spread about ±<span data-f="topspread">22</span>% around it. Checked on players left out of the fit (Oct 2026), it was within about 10% of the real median from 700 pp up, and read ~15% high for 300–700 pp players.</p>
     <p id="proj-foot">Projection: from <span data-f="hist">thousands of</span> players' histories (dated top-100 scores and plays per month, rebuilt into pp and hours over time; players who mostly play other modes left out), compared 12 months apart. Rebuilding past pp from today's top 100 has a blind spot: scores a player later beat or pushed out of their top 100 are gone. Every reasonable way of handling that agrees players drift back toward the trend; they put the speed between <span data-f="klo">0.3</span> and <span data-f="khi">0.6</span>, which is why the range is wide.</p>
     <p>Data: data.ppy.sh random_10000 dumps and the osu! API; players with under 1 hour logged are left out of the curve. Hours = total_seconds_played. Past about <span data-f="thin">1,000</span> hours only 2% of players remain, so read that region loosely. The curve rebuilds itself monthly, ranks weekly and the projection monthly; this version was built <span data-f="built">recently</span>.</p>
     </details>
@@ -542,6 +545,10 @@ const owAbove = pp => 100 * (1 - Math.min(1, pp < OW_SPLIT ? fracAboveIn(LOW, pp
 // fitted on 2,086 real players: median stars of each one's top 10 plays without rate/difficulty mods.
 // ln(stars) = 0.008273 ln(pp)^2 + 0.12691 ln(pp) + 0.11909; matches every pp bracket's median within ~0.1 star
 const SC = HIST.stars || { a: 0.11909, b: 0.12691, c: 0.008273 };
+// typical pp of your #1 play at each total pp, fitted the same way on the same players (any mods); ~±22% spread
+const TC = HIST.top || { a: -1.16729, b: 0.55698, c: 0.028264, spread: 0.218 };
+const topOf = pp => { const x = Math.log(Math.max(pp, 1)); return Math.exp(TC.c * x * x + TC.b * x + TC.a); };
+const topPill = pp => `<span class="topp" title="typical pp of the #1 top play at this pp">#1 ~${fmt(topOf(pp))}pp</span>`;
 const starOf = pp => { const x = Math.log(Math.max(pp, 1)); return Math.min(9.5, Math.max(0.5, Math.exp(SC.c * x * x + SC.b * x + SC.a))); };
 const SPEC = [[0.1, "#4290fb"], [1.25, "#4fc0ff"], [2, "#4fffd5"], [2.5, "#7cff4f"], [3.3, "#f6f05c"], [4.2, "#ff8068"],
   [4.9, "#ff4e6f"], [5.8, "#c645b8"], [6.7, "#6563de"], [7.7, "#18158e"], [9, "#000000"]];
@@ -889,7 +896,7 @@ function renderCompare() {
       ${stat("More pp than", `${fmt(owAbove(pp), 1)}%`, `of ${OW_GROUP}`, "blue")}
       ${stat("More pp than", `${fmt(above, 1)}%`, "of all ranked players, any play time")}
       ${rankTile}
-      ${stat("Star level", starPill(pp, true), pp > 10000 ? "typical stars of top plays (extrapolated past 10k pp)" : "typical stars of top plays at your pp")}
+      ${stat("Top plays", `${starPill(pp, true)}<span class="topv">~${fmt(topOf(pp))} pp</span>`, `typical stars, and pp of the #1 play (usually ${fmt(topOf(pp) / Math.exp(TC.spread))}–${fmt(topOf(pp) * Math.exp(TC.spread))})${pp > 10000 ? ", extrapolated past 10k pp" : ""}`)}
       ${accTile(pp)}
       ${owTile(pp)}
     </dl>
@@ -932,7 +939,7 @@ function renderProj() {
   const [H, pp] = state.you, Ht = projTarget(H), [k, l, u] = projAt(H, pp, Ht);
   const rk = rankOf(k);
   $("proj-pp").innerHTML = `~${fmt(k)}<small> pp</small>`;
-  $("proj-rank").innerHTML = `${rk.text} ${starPill(k)} ${owPill(k)}`;
+  $("proj-rank").innerHTML = `${rk.text} ${starPill(k)} ${topPill(k)} ${owPill(k)}`;
   $("proj-rank-note").textContent = "rank on today's leaderboard";
   const btNow = compare(H, pp).pct, btThen = compare(Ht, k).pct;
   $("proj-meta").innerHTML = `<span><i>better than</i> <b style="color:#fff">${fmt(btThen, 1)}%</b> <i>of players at ${dh(Ht)} (now ${fmt(btNow, 1)}%)</i></span><span>+${fmt(k - pp)} pp from now</span><span><i>range</i> ${fmt(l)}–${fmt(u)} pp</span><span><i>rank range</i> ${rankOf(u).text.replace("top ", "")}–${rankOf(l).text.replace("~", "")}</span>${Ht > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
@@ -949,7 +956,7 @@ function renderTrend() {
   const H = state.estH, m = medPP(H), rk = rankOf(m);
   $("trend-slider").value = Math.round((Math.log10(H) - tlo) / (thi - tlo) * 1000);
   $("trend-pp").innerHTML = `${fmt(m)}<small> pp</small>`;
-  $("trend-rank").innerHTML = `${rk.text} ${starPill(m)} ${owPill(m)}`;
+  $("trend-rank").innerHTML = `${rk.text} ${starPill(m)} ${topPill(m)} ${owPill(m)}`;
   $("trend-rank-note").textContent = "";
   $("trend-meta").innerHTML = `<span><i>middle 68%</i> ${fmt(band(H, -1))}–${fmt(band(H, 1))}</span><span><i>middle 95%</i> ${fmt(band(H, -2))}–${fmt(band(H, 2))}</span>${realPPH(H) ? `<span><i>real players gained</i> <b style="color:#fff">~${fmt(realPPH(H)[2], 0)} pp/h</b> <i>(${fmt(realPPH(H)[0], 0)}–${fmt(realPPH(H)[1], 0)})</i></span>` : ""}<span><i>curve slope</i> ~${fmt(ppPerHour(H), 1)} pp/h</span><span><i>exponent</i> ${fmt(expo(H), 2)}</span>${H > P.thin ? "<span style='color:var(--gold)'>few players this far out</span>" : ""}`;
   $("trend-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small>`;
@@ -1180,6 +1187,7 @@ async function liveCheck() {
       " It's re-measured monthly. Faint dotted line: if you kept your exact percentile forever.";
   }
   if (HIST.players) fill("hist", fmt(HIST.players));
+  if (HIST.top) { fill("topn", fmt(HIST.top.n)); fill("topspread", Math.round((Math.exp(HIST.top.spread) - 1) * 100)); }
   if (HIST.stars) { fill("starsn", fmt(HIST.stars.n)); fill("starspread", Math.round((Math.exp(HIST.stars.spread || 0.08) - 1) * 100)); }
   if (HIST.drift) { fill("klo", fmt(HIST.drift.lo, 2)); fill("khi", fmt(HIST.drift.hi, 2)); }
   // accuracy self-check, recomputed on every rebuild on players held out of the fit
@@ -1221,7 +1229,7 @@ function renderMine() {
   const when = k[2] === "rec" && k[3] ? ` ${new Date(k[3]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "";
   $("mine-title").textContent = `${MINE.user}'s progress`;
   $("mine-pp").innerHTML = `${fmt(pp)}<small> pp</small>`;
-  $("mine-rank").innerHTML = `${rk.text} ${starPill(pp)} ${owPill(pp)}`;
+  $("mine-rank").innerHTML = `${rk.text} ${starPill(pp)} ${topPill(pp)} ${owPill(pp)}`;
   $("mine-rank-note").textContent = "on today's leaderboard";
   $("mine-meta").innerHTML = `<span><i>better than</i> <b style="color:#fff">${fmt(r.pct, 1)}%</b> <i>of players at ${dh(H)} today</i></span>` +
     `<span><i>std devs</i> ${r.z >= 0 ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ</span><span><i>typical pp</i> ${fmt(r.median)}</span>` +
