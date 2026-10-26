@@ -55,7 +55,8 @@ def profile(best, now):
     return {
         "aim": med([p["attr"]["aim_difficulty"] for p in b25]),
         "chokes": sum(1 for p in b50 if 1 <= (p.get("miss") or 0) <= 3) / len(b50),
-        "speed": med([p["attr"]["speed_difficulty"] / p["attr"]["aim_difficulty"] for p in b25]),   # higher = more streamy
+        "speed": med([p["attr"]["speed_difficulty"] for p in b25]),
+        "speedAim": med([p["attr"]["speed_difficulty"] / p["attr"]["aim_difficulty"] for p in b25]),   # higher = more streamy
         "length": med(length),
         "reading": sum(1 for p in b50 if (eff_ar(p.get("ar"), m(p)) or 0) >= 9.6) / len(b50),
         "consistency": sum(1 for p in b50 if p.get("fc") or p.get("miss") == 0) / len(b50),
@@ -70,8 +71,8 @@ def profile(best, now):
 
 
 AXES = [  # group, key, label, unit, which way is better, what a weak value means
-    ("Aim", "aim", "Jump difficulty", "num", 1, "the jumps in your top plays are easier than peers'"),
-    ("Speed", "speed", "Streams (speed ÷ aim)", "ratio", 1, "your top maps are jump maps; streams and fast tapping are barely trained"),
+    ("Aim", "aim", "Aim difficulty", "num", 1, "the jumps in your top plays are easier than peers'"),
+    ("Speed", "speed", "Speed difficulty", "num", 1, "the tapping in your top plays is easier than peers'; streams and fast tapping are barely trained"),
     ("Stamina", "length", "Map length", "sec", 1, "your top plays are short; long maps test stamina and recovering from mistakes"),
     ("Consistency", "consistency", "Full combos", "pct", 1, "more of your top plays have misses than peers'"),
     ("Accuracy", "accuracy", "Accuracy", "acc", 1, "your accuracy on top plays trails peers'"),

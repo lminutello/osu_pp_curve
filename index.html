@@ -1289,7 +1289,7 @@ function renderInsights(I) {
   if (X) h += `<div><h4>Other signals</h4><div class="kv"><span><i>top plays set in the last 2 weeks</i> ${fmt(100 * X.momentum)}% <i>(peers ${fmt(100 * (X.peerMomentum ?? 0))}%)</i></span>
     <span><i>DT</i> ${fmt(100 * X.dtShare)}% <i>(peers ${fmt(100 * (X.peerDt ?? 0))}%)</i></span><span><i>HD</i> ${fmt(100 * X.hdShare)}% <i>(peers ${fmt(100 * (X.peerHd ?? 0))}%)</i></span>
     <span><i>top plays over 2 min</i> ${fmt(100 * X.longShare)}%</span></div></div>`;
-  h += `<div style="font-size:11.5px;color:var(--muted);font-weight:600">Updated after each daily pull (${I.at ? new Date(I.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}); peers re-picked weekly. "Speed" is the speed ÷ aim difficulty of your top maps: higher means more streams.</div>`;
+  h += `<div style="font-size:11.5px;color:var(--muted);font-weight:600">Updated after each daily pull (${I.at ? new Date(I.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}); peers re-picked weekly. Aim and speed are osu!'s own aim and speed difficulty of your top 25 maps (the two parts of star rating).</div>`;
   el.innerHTML = h; el.hidden = false;
 }
 fetch("data/me_insights.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(I => { if (I && I.skills) renderInsights(I); });
