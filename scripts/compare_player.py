@@ -71,4 +71,4 @@ def main():
 if __name__ == "__main__":
     main()
     if os.environ.get("GITHUB_ACTIONS"):                    # also as a run annotation, readable without the log
-        print("::notice title=Skill comparison::" + "%0A".join(l.replace("%", "%25") for l in OUT))
+        print("::notice title=Skill comparison::" + "%0A".join(l.replace("%", "%25").replace("\n", "%0A") for l in OUT))
