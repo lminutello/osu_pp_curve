@@ -1209,13 +1209,14 @@ function renderInsights(I) {
   const el = $("mine-ins"), esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const f = (u, v) => v == null ? "—" : u === "ratio" ? fmt(v, 2) : u === "sec" ? `${fmt(v)} s` : u === "pct" ? `${fmt(100 * v)}%` : u === "acc" ? `${fmt(v, 2)}%` : `★${fmt(v, 2)}`;
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"));
   const col = p => p == null ? "var(--muted)" : p < 35 ? "var(--red)" : p < 65 ? "var(--gold)" : "var(--mine)";
   let h = "";
   // skill profile
   h += `<div><h4>Skill profile <small>vs ${I.peers.near} players at ${fmt(I.peers.ppRange[0])}–${fmt(I.peers.ppRange[1])} pp · bar = your percentile among them</small></h4>`;
   for (const s of I.skills) {
     const weak = I.weak.includes(s.key);
-    h += `<div class="sk ${weak ? "weak" : ""}"><span class="lab">${s.label}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : s.pct + "th"}</span>
+    h += `<div class="sk ${weak ? "weak" : ""}"><span class="lab">${s.label}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : ord(s.pct)}</span>
       <span class="sub">you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
   }
   h += `</div>`;
@@ -1225,7 +1226,7 @@ function renderInsights(I) {
     for (const r of I.recs) {
       const sk = I.skills.find(s => s.key === r.key);
       h += `<div class="card2"><div><b>${esc(r.type)}</b> <span style="color:var(--muted);font-size:12px;font-weight:700">· ★${r.stars[0]}–${r.stars[1]}</span></div>`;
-      if (r.why && sk) h += `<div style="font-size:12.5px;font-weight:600;color:var(--fg-2)">${esc(sk.label)}: ${esc(r.why)} (${sk.pct}th percentile).</div>`;
+      if (r.why && sk) h += `<div style="font-size:12.5px;font-weight:600;color:var(--fg-2)">${esc(sk.label)}: ${esc(r.why)} (${ord(sk.pct)} percentile).</div>`;
       h += r.maps.length ? r.maps.map(m => `<div class="map"><a href="https://osu.ppy.sh/b/${m.map}" target="_blank" rel="noopener">${esc(m.title)}${m.mods.length ? " +" + m.mods.join("") : ""}</a>
         <span>★${m.stars} · ${mmss(m.length)} · ${m.bpm} BPM · AR ${m.ar} · mapped by ${esc(m.mapper)} · in ${m.peers} similar player${m.peers > 1 ? "s'" : "'s"} top plays</span></div>`).join("")
         : `<div style="font-size:12.5px;color:var(--muted)">No fitting maps among peers' top plays yet; it fills in as more peers are pulled.</div>`;

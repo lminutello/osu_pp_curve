@@ -88,7 +88,7 @@ REC_TYPES = {
 }
 
 
-def recs_for(key, me_prof, my, pool, n=4):
+def recs_for(key, me_prof, my, pool, used, n=4):
     name, ok = REC_TYPES[key]
     lo, hi = (my["stars_hi"], my["stars_hi"] + 0.45) if key == "stars" else (my["stars_lo"] * (0.9 if key in ("speed", "accuracy") else 1), my["stars_med"] * 1.05)
     cands = []
@@ -100,8 +100,8 @@ def recs_for(key, me_prof, my, pool, n=4):
     cands.sort(key=lambda x: (-x[0], -x[1], -x[2]))
     out, seen = [], set()
     for k, ahead, _, p, a in cands:
-        if p["map"] in seen: continue
-        seen.add(p["map"])
+        if p["map"] in seen or p["map"] in used: continue
+        seen.add(p["map"]); used.add(p["map"])
         r = rate(set(p.get("mods") or []))
         out.append({"map": p["map"], "title": p.get("title"), "mapper": p.get("mapper"), "mods": [m for m in p.get("mods") or [] if m in ("DT", "NC", "HR", "HD", "EZ", "FL")],
                     "stars": round(a["star_rating"], 2), "length": round((p.get("length") or 0) / r), "bpm": round((p.get("bpm") or 0) * r),
@@ -169,7 +169,7 @@ def main():
         skills.append({"key": key, "label": label, "unit": unit, "you": mine.get(key), "peerMedian": med(vals),
                        "peerP25": vals[len(vals) // 4] if vals else None, "peerP75": vals[3 * len(vals) // 4] if vals else None,
                        "pct": pct, "why": why})
-    weak = [s for s in sorted(skills, key=lambda s: s["pct"] if s["pct"] is not None else 50) if s["pct"] is not None and s["pct"] <= 35][:3]
+    weak = [s for s in sorted(skills, key=lambda s: s["pct"] if s["pct"] is not None else 50) if s["pct"] is not None and s["pct"] <= 35][:4]
     strong = [s for s in sorted(skills, key=lambda s: -(s["pct"] or 0)) if (s["pct"] or 0) >= 65][:3]
 
     # recommendation pool: peers' top plays (near and a step ahead) with difficulty attributes
@@ -184,7 +184,8 @@ def main():
     played = {p["map"] for p in best} | {m["map"] for m in me.get("most_played", [])} | {p["map"] for p in log} | {p["map"] for p in me.get("recent", [])}
     my = {"played": played, "mappers": {p.get("mapper") for p in best[:50]},
           "stars_lo": my_stars[len(my_stars) // 4], "stars_med": stats.median(my_stars), "stars_hi": my_stars[int(len(my_stars) * 0.9)]}
-    recs = [dict(recs_for(s["key"], mine, my, pool), why=s["why"]) for s in weak] or [recs_for("stars", mine, my, pool)]
+    used = set()                                         # each map is recommended once
+    recs = [dict(recs_for(s["key"], mine, my, pool, used), why=s["why"]) for s in weak] or [recs_for("stars", mine, my, pool, used)]
 
     # trend: hardest aim / speed among top plays set each week
     weeks = defaultdict(list)
