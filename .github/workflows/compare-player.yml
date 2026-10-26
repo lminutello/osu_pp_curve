@@ -1,0 +1,30 @@
+name: Compare a player's skills (manual)
+
+# Prints another player's skill profile next to yours (same numbers as the site's "Skills vs peers") to the run log.
+# Saves nothing and doesn't touch the site.
+# Estimated time: under 1 minute.
+on:
+  workflow_dispatch:
+    inputs:
+      user:
+        description: "osu! username"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compare
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+          COMPARE_USER: ${{ inputs.user }}
+        run: python scripts/compare_player.py
