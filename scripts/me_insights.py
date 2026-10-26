@@ -98,9 +98,22 @@ REC_TYPES = {
 }
 
 
-def recs_for(key, me_prof, my, pool, used, n=4):
+STATE = D("me_recs_state.json")       # recommended maps waiting for you, so they stick around until you play them
+KEEP_DAYS = 60                         # ...or until they've waited this long
+KEEP_SLACK = 0.4                       # ...or until they're this many stars outside the category's current range
+
+
+def recs_for(key, me_prof, my, pool, used, keep=(), n=4, today="", fill=True):
     name, ok = REC_TYPES[key]
     lo, hi = (my["stars_hi"], my["stars_hi"] + 0.45) if key == "stars" else (my["stars_lo"] * (0.9 if key in ("speed", "accuracy") else 1), my["stars_med"] * 1.05)
+    # maps recommended before stay first, unless played, too old, or now well out of range
+    out = []
+    for m in keep:
+        age = (datetime.fromisoformat(today) - datetime.fromisoformat(m.get("since", today))).days if today else 0
+        if m["map"] in my["played"] or m["map"] in used or age > KEEP_DAYS or not lo - KEEP_SLACK <= m["stars"] <= hi + KEEP_SLACK:
+            continue
+        used.add(m["map"]); out.append(dict(m, new=False))
+        if len(out) >= n: break
     cands = []
     for (mp, mods), c in pool.items():
         p, a = c["play"], c["play"]["attr"]
@@ -108,16 +121,16 @@ def recs_for(key, me_prof, my, pool, used, n=4):
             continue
         cands.append((len(c["who"]), c["ahead"], p.get("pp") or 0, p, a))
     cands.sort(key=lambda x: (-x[0], -x[1], -x[2]))
-    out, seen = [], set()
+    seen = set()
     for k, ahead, _, p, a in cands:
+        if len(out) >= n or not fill: break
         if p["map"] in seen or p["map"] in used: continue
         seen.add(p["map"]); used.add(p["map"])
         r = rate(set(p.get("mods") or []))
         out.append({"map": p["map"], "title": p.get("title"), "mapper": p.get("mapper"), "mods": [m for m in p.get("mods") or [] if m in ("DT", "NC", "HR", "HD", "EZ", "FL")],
                     "stars": round(a["star_rating"], 2), "length": round((p.get("length") or 0) / r), "bpm": round((p.get("bpm") or 0) * r),
                     "ar": round(eff_ar(p.get("ar"), set(p.get("mods") or [])) or 0, 1), "od": p.get("od"),
-                    "speedAim": round(a["speed_difficulty"] / a["aim_difficulty"], 2), "peers": k})
-        if len(out) >= n: break
+                    "speedAim": round(a["speed_difficulty"] / a["aim_difficulty"], 2), "peers": k, "since": today, "new": True})
     return {"key": key, "type": name, "stars": [round(lo, 1), round(hi, 1)], "maps": out}
 
 
@@ -205,9 +218,21 @@ def main():
     my = {"aim_hi": my_aim[int(len(my_aim) * 0.75)], "played": played, "mappers": {p.get("mapper") for p in best[:50]},
           "stars_lo": my_stars[len(my_stars) // 4], "stars_med": stats.median(my_stars), "stars_hi": my_stars[int(len(my_stars) * 0.9)]}
     used = set()                                         # each map is recommended once
-    rec_keys = [k for k in REC_ORDER if k in {s["key"] for s in weak}] or ["stars"]
+    state = {}
+    if os.path.exists(STATE):
+        with open(STATE) as f:
+            state = json.load(f)
+    today = now.strftime("%Y-%m-%d")
+    # categories: today's weaknesses, plus any earlier card that still has maps waiting for you
+    waiting = {k for k, ms in state.items() if any(m["map"] not in played for m in ms)}
+    rec_keys = [k for k in REC_ORDER if k in {s["key"] for s in weak} | waiting] or ["stars"]
     why = {s["key"]: s["why"] for s in skills}
-    recs = [dict(recs_for(k, mine, my, pool, used), why=why[k]) for k in rec_keys]
+    weak_keys = {s["key"] for s in weak} or {"stars"}
+    # a card that's no longer a weakness keeps the maps already waiting in it, but gets no new ones
+    recs = [dict(recs_for(k, mine, my, pool, used, keep=state.get(k, []), today=today, fill=k in weak_keys), why=why[k]) for k in rec_keys]
+    recs = [r for r in recs if r["maps"] or r["key"] in {s["key"] for s in weak}]
+    with open(STATE, "w") as f:
+        json.dump({r["key"]: [{k: v for k, v in m.items() if k != "new"} for m in r["maps"]] for r in recs}, f, separators=(",", ":"))
 
     # trend: hardest aim / speed among top plays set each week
     weeks = defaultdict(list)

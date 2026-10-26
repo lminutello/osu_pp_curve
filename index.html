@@ -1247,7 +1247,7 @@ function renderInsights(I) {
   h += `</div>`;
   // weaknesses + what to play
   if (I.recs && I.recs.length) {
-    h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played</small></h4><div style="display:grid;gap:10px">`;
+    h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played · each stays until you play it (or ~2 months)</small></h4><div style="display:grid;gap:10px">`;
     const RC = { length: ["var(--purple)", "length"], speed: ["var(--blue)", "bpm"], variety: ["var(--gold)", "mapper"], stars: ["var(--pink)", "stars"],
       aim: ["#ff9b6a", "stars"], consistency: ["var(--mine)", "len"], chokes: ["var(--mine)", "len"], accuracy: ["var(--mine)", "od"], reading: ["var(--blue)", "ar"] };
     for (const r of I.recs) {
@@ -1259,7 +1259,7 @@ function renderInsights(I) {
         const chip = (key, txt) => `<i class="${hot === key ? "hot" : ""}">${txt}</i>`;
         return `<a class="rmap" href="https://osu.ppy.sh/b/${m.map}" target="_blank" rel="noopener"><span class="song">${esc(song)}</span>
           <span class="who">${m.peers}<small>similar<br>player${m.peers > 1 ? "s" : ""}</small></span><span class="diff">[${esc(diff)}]${m.mods.length ? " +" + m.mods.join("") : ""} · ${esc(m.mapper)}</span>
-          <span class="chips">${chip("stars", "★" + m.stars)}${chip("length", mmss(m.length))}${chip("bpm", m.bpm + " BPM")}${chip("ar", "AR " + m.ar)}${hot === "mapper" ? chip("mapper", "new mapper") : ""}</span></a>`;
+          <span class="chips">${m.new === false && m.since ? `<i title="recommended earlier and still waiting for you">waiting since ${new Date(m.since + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</i>` : `<i class="hot">new</i>`}${chip("stars", "★" + m.stars)}${chip("length", mmss(m.length))}${chip("bpm", m.bpm + " BPM")}${chip("ar", "AR " + m.ar)}${hot === "mapper" ? chip("mapper", "new mapper") : ""}</span></a>`;
       }).join("") : `<div style="font-size:12.5px;color:var(--muted)">No fitting maps among peers' top plays yet; it fills in as more peers are pulled.</div>`) + `</div></div>`;
     }
     h += `</div></div>`;
