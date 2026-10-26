@@ -2,16 +2,18 @@
 """
 Skill profile of any player, next to yours, using the same numbers as the "Skills vs peers" section.
 Prints a table to the log; saves nothing. Percentiles are against your current peer group (players near YOUR pp),
-so they're only like-for-like when the other player's pp is close to yours.
+so they're only like-for-like when the other player's pp is close to yours. With PEER_PP set, a fresh group of ~30
+players within 15% of that pp is pulled instead and both of you are ranked against it.
 
-Reads OSU_CLIENT_ID / OSU_CLIENT_SECRET and COMPARE_USER. About 30 requests (~30 seconds).
+Reads OSU_CLIENT_ID / OSU_CLIENT_SECRET, COMPARE_USER and optional PEER_PP. About 30 requests (~30 seconds);
+with PEER_PP roughly 10-15 minutes.
 Usage:  COMPARE_USER=name python scripts/compare_player.py
 """
 import json, os, sys, urllib.parse
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from me_plays import Api, play, attributes  # noqa: E402
+from me_plays import Api, play, attributes, pull_peers  # noqa: E402
 from me_insights import AXES, profile, D     # noqa: E402
 
 
@@ -41,8 +43,12 @@ def main():
         sys.exit(f"{u['username']} doesn't have enough top plays to profile.")
     them["accuracy"] = st.get("hit_accuracy") or them["accuracy"]
     mine["accuracy"] = (me.get("profile") or {}).get("acc") or mine["accuracy"]
-    with open(D("me_peers.json")) as f:
-        peers = json.load(f)
+    peer_pp = float(os.environ.get("PEER_PP") or 0)
+    if peer_pp:
+        peers = pull_peers(api, cache, peer_pp, u["id"], n_near=30, n_ahead=0)
+    else:
+        with open(D("me_peers.json")) as f:
+            peers = json.load(f)
     near = []
     for p in peers.get("players", []):
         q = profile(p["best"], now) if p["group"] == "near" else None
@@ -59,7 +65,7 @@ def main():
     show = lambda unit, v: "—" if v is None else (fmt[unit](v) if callable(fmt[unit]) else fmt[unit].format(v))
     say(f"\n{u['username']}: {st.get('pp'):.0f} pp, {(st.get('play_time') or 0) / 3600:.0f} h, rank #{st.get('global_rank')}")
     say(f"{me['username']}: {me['profile']['pp']:.0f} pp, {me['profile']['hours']:.0f} h")
-    say(f"(percentiles vs {len(near)} players near {me['username']}'s pp)\n")
+    say(f"(percentiles vs {len(near)} players near {f"{peer_pp:.0f}" if peer_pp else me['username'] + "'s"} pp)\n")
     say(f"{'skill':20}{u['username']:>22}{me['username']:>22}")
     for group, key, label, unit, better, why in AXES:
         say(f"{group:20}{show(unit, them.get(key)) + ' (' + pct(key, them.get(key)) + ')':>22}"

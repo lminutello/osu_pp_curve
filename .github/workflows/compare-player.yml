@@ -2,13 +2,16 @@ name: Compare a player's skills (manual)
 
 # Prints another player's skill profile next to yours (same numbers as the site's "Skills vs peers") to the run log.
 # Saves nothing and doesn't touch the site.
-# Estimated time: under 1 minute.
+# Estimated time: under 1 minute; 10-15 minutes with a peer pp (it pulls a fresh group of ~30 players).
 on:
   workflow_dispatch:
     inputs:
       user:
         description: "osu! username"
         required: true
+      peer_pp:
+        description: "Rank both against players near this pp (blank = your usual peers)"
+        required: false
 
 permissions:
   contents: read
@@ -16,7 +19,7 @@ permissions:
 jobs:
   compare:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,4 +30,5 @@ jobs:
           OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
           OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
           COMPARE_USER: ${{ inputs.user }}
+          PEER_PP: ${{ inputs.peer_pp }}
         run: python scripts/compare_player.py
