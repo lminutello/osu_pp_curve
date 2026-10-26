@@ -53,5 +53,5 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/history.jsonl.gz data/history_fit.json data/model.json
+          git add -A data/
           if git diff --cached --quiet; then echo "No changes."; else git commit -m "Add player histories ($(date -u +%Y-%m-%d))" && git pull --rebase -q origin main && git push; fi
