@@ -160,6 +160,27 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
   margin: 0 6px; border-radius: 14px; background: color-mix(in srgb, var(--c) 7%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
 .box.gold { --c: var(--gold); }
 .box.mine { --c: var(--mine); }
+.ins { grid-column: 1 / -1; display: grid; gap: 14px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.ins h4 { margin: 0 0 6px; font: 900 11px var(--f); letter-spacing: .1em; text-transform: uppercase; color: var(--mine); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ins h4 small { color: var(--muted); font-weight: 700; letter-spacing: 0; text-transform: none; font-size: 11.5px; }
+.ins .sk { display: grid; grid-template-columns: 9.5em 1fr 3.4em; gap: 4px 10px; align-items: center; font-size: 13px; font-weight: 700; color: var(--fg-2); padding: 3px 0; }
+.ins .sk.weak { color: #fff; } .ins .sk.weak .lab::before { content: "▲ "; color: var(--red); font-size: 10px; }
+.ins .bar { height: 8px; border-radius: 99px; background: var(--bg-2); position: relative; overflow: hidden; }
+.ins .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; }
+.ins .sk .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ins .sk .sub { grid-column: 1 / -1; color: var(--muted); font-size: 12px; font-weight: 600; margin-top: -2px; }
+.ins .card2 { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.ins .card2 b { color: #fff; }
+.ins .map { display: grid; gap: 1px; font-size: 13px; font-weight: 700; padding: 6px 0; border-top: 1px dashed var(--line); }
+.ins .map:first-of-type { border-top: 0; }
+.ins .map a { color: var(--mine); text-decoration: none; overflow-wrap: anywhere; } .ins .map a:hover { text-decoration: underline; }
+.ins .map span { color: var(--muted); font-size: 12px; font-weight: 600; }
+.ins .kv { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; font-weight: 700; color: var(--fg-2); }
+.ins .kv i { font-style: normal; color: var(--muted); }
+.ins table { border-collapse: collapse; font-size: 12.5px; font-weight: 700; color: var(--fg-2); width: 100%; }
+.ins td, .ins th { padding: 3px 6px; text-align: right; font-variant-numeric: tabular-nums; } .ins th { color: var(--muted); font-weight: 800; }
+.ins td:first-child, .ins th:first-child { text-align: left; }
+@media (max-width: 560px) { .ins .sk { grid-template-columns: 7.5em 1fr 3em; } }
 .box input[type=range] { accent-color: var(--c); }
 .box-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; align-items: center; }
 .box-title { font: 800 10.5px var(--f); letter-spacing: .12em; text-transform: uppercase; color: var(--c); grid-column: 1 / -1; margin-bottom: -4px;
@@ -333,6 +354,7 @@ canvas.drag-ok { cursor: grab; } canvas.dragging { cursor: grabbing; }
         <input type="range" id="mine-slider" min="0" max="1000" step="1" value="1000" aria-label="Point in your progress">
         <div class="box-val" id="mine-val"></div>
         <details class="fold"><summary>How this is recorded</summary><p>Green line: your pp against your play time. Solid with dots: recorded, one point each time your stats are pulled (daily, when they've changed), kept forever. Dotted: a one-time estimate back to your first hour, from how far ahead of the typical player real players at your level were earlier on. Dashed: rebuilt from the dates of your top 100 plays and your plays per month; that can only see scores still in your top 100, so it's a floor on your past pp and is used only where it's above the estimate. Between points it's a straight line on the chart. Ranks, "better than" and the Overwatch rank at every point use today's data, so they show where that pp would stand now, not where it stood then.</p></details>
+        <div class="ins" id="mine-ins" hidden></div>
       </div>
     </section>
 
@@ -1182,6 +1204,64 @@ function renderMine() {
   $("mine-val").innerHTML = `${dh(H)}<small>${fmt(H)} h</small><small>${now[0] - H < 0.05 ? "now" : `−${dh(now[0] - H)} from now`}</small>`;
   $("mine-slider").value = Math.round(state.mineT * 1000);
 }
+// ---------- insights: data/me_insights.json, rebuilt after every daily pull by scripts/me_insights.py
+function renderInsights(I) {
+  const el = $("mine-ins"), esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const f = (u, v) => v == null ? "—" : u === "ratio" ? fmt(v, 2) : u === "sec" ? `${fmt(v)} s` : u === "pct" ? `${fmt(100 * v)}%` : u === "acc" ? `${fmt(v, 2)}%` : `★${fmt(v, 2)}`;
+  const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  const col = p => p == null ? "var(--muted)" : p < 35 ? "var(--red)" : p < 65 ? "var(--gold)" : "var(--mine)";
+  let h = "";
+  // skill profile
+  h += `<div><h4>Skill profile <small>vs ${I.peers.near} players at ${fmt(I.peers.ppRange[0])}–${fmt(I.peers.ppRange[1])} pp · bar = your percentile among them</small></h4>`;
+  for (const s of I.skills) {
+    const weak = I.weak.includes(s.key);
+    h += `<div class="sk ${weak ? "weak" : ""}"><span class="lab">${s.label}</span><span class="bar"><i style="width:${s.pct ?? 0}%;background:${col(s.pct)}"></i></span><span class="num">${s.pct == null ? "—" : s.pct + "th"}</span>
+      <span class="sub">you ${f(s.unit, s.you)} · peers ${f(s.unit, s.peerMedian)} (middle half ${f(s.unit, s.peerP25)}–${f(s.unit, s.peerP75)})</span></div>`;
+  }
+  h += `</div>`;
+  // weaknesses + what to play
+  if (I.recs && I.recs.length) {
+    h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played</small></h4><div style="display:grid;gap:10px">`;
+    for (const r of I.recs) {
+      const sk = I.skills.find(s => s.key === r.key);
+      h += `<div class="card2"><div><b>${esc(r.type)}</b> <span style="color:var(--muted);font-size:12px;font-weight:700">· ★${r.stars[0]}–${r.stars[1]}</span></div>`;
+      if (r.why && sk) h += `<div style="font-size:12.5px;font-weight:600;color:var(--fg-2)">${esc(sk.label)}: ${esc(r.why)} (${sk.pct}th percentile).</div>`;
+      h += r.maps.length ? r.maps.map(m => `<div class="map"><a href="https://osu.ppy.sh/b/${m.map}" target="_blank" rel="noopener">${esc(m.title)}${m.mods.length ? " +" + m.mods.join("") : ""}</a>
+        <span>★${m.stars} · ${mmss(m.length)} · ${m.bpm} BPM · AR ${m.ar} · mapped by ${esc(m.mapper)} · in ${m.peers} similar player${m.peers > 1 ? "s'" : "'s"} top plays</span></div>`).join("")
+        : `<div style="font-size:12.5px;color:var(--muted)">No fitting maps among peers' top plays yet; it fills in as more peers are pulled.</div>`;
+      h += `</div>`;
+    }
+    h += `</div></div>`;
+  }
+  // chokes
+  const C = I.chokes;
+  if (C) h += `<div><h4>Chokes <small>top ${C.n} plays</small></h4><div class="kv"><span><i>full combos</i> <b style="color:#fff">${C.fc}</b></span><span><i>lost to 1–3 misses</i> <b style="color:#fff">${C.few}</b></span><span><i>4+ misses</i> ${C.many}</span></div>` +
+    (C.worst.length ? `<div style="font-size:12.5px;color:var(--muted);font-weight:600;margin-top:4px">Best pp left on the table: ${C.worst.map(w => `${esc(w.title.replace(/ \[.*$/, ""))} (${w.miss} miss${w.miss > 1 ? "es" : ""}, ${w.pp} pp)`).join(" · ")}</div>` : "") + `</div>`;
+  // sessions
+  const S = I.sessions;
+  if (S) {
+    h += `<div><h4>How you play <small>from ${fmt(S.plays)} logged plays over ${S.days} day${S.days > 1 ? "s" : ""} (grows every day)</small></h4><div class="kv">
+      <span><i>pass rate</i> <b style="color:#fff">${fmt(S.passRate, 0)}%</b></span><span><i>attempts per map</i> <b style="color:#fff">${fmt(S.perMap, 1)}</b></span><span><i>different maps</i> ${S.maps}</span></div>`;
+    if (S.warmup) { const d = S.warmup.late - S.warmup.early;
+      h += `<div style="font-size:12.5px;font-weight:600;color:var(--fg-2);margin-top:4px">Accuracy on passes: <b>${fmt(S.warmup.early, 2)}%</b> early in a session → <b>${fmt(S.warmup.late, 2)}%</b> late. ${d < -0.75 ? "You fade as sessions go on: shorter sessions or breaks may help." : d > 0.75 ? "You warm up: your best plays come later in a session." : "Steady through a session."}</div>`; }
+    if (S.mostRetried.length) h += `<div style="font-size:12.5px;color:var(--muted);font-weight:600;margin-top:4px">Most attempted: ${S.mostRetried.map(m => `${esc(m.title.replace(/ \[.*$/, ""))} (${m.attempts} tries, ${m.passes} passes)`).join(" · ")}</div>`;
+    if (S.timeOfDay && S.timeOfDay.length) h += `<div class="kv" style="margin-top:4px">${S.timeOfDay.map(t => `<span><i>${t.when}</i> ${fmt(t.passRate, 0)}% passes</span>`).join("")}</div>`;
+    h += `</div>`;
+  }
+  // trend
+  if (I.trend && I.trend.length > 1) {
+    h += `<div><h4>Hardest top plays by week <small>aim and speed difficulty of the hardest top play you set that week</small></h4><table><tr><th>Week of</th><th>Aim</th><th>Speed</th><th>Stars</th><th>Top plays</th></tr>` +
+      I.trend.map(t => `<tr><td>${new Date(t.week + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</td><td>${t.aim}</td><td>${t.speed}</td><td>★${t.stars}</td><td>${t.plays}</td></tr>`).join("") + `</table></div>`;
+  }
+  // extras
+  const X = I.extra;
+  if (X) h += `<div><h4>Other signals</h4><div class="kv"><span><i>top plays set in the last 2 weeks</i> ${fmt(100 * X.momentum)}% <i>(peers ${fmt(100 * (X.peerMomentum ?? 0))}%)</i></span>
+    <span><i>DT</i> ${fmt(100 * X.dtShare)}% <i>(peers ${fmt(100 * (X.peerDt ?? 0))}%)</i></span><span><i>HD</i> ${fmt(100 * X.hdShare)}% <i>(peers ${fmt(100 * (X.peerHd ?? 0))}%)</i></span>
+    <span><i>top plays over 2 min</i> ${fmt(100 * X.longShare)}%</span></div></div>`;
+  h += `<div style="font-size:11.5px;color:var(--muted);font-weight:600">Updated after each daily pull (${I.at ? new Date(I.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}); peers re-picked weekly. "Speed" is the speed ÷ aim difficulty of your top maps: higher means more streams.</div>`;
+  el.innerHTML = h; el.hidden = false;
+}
+fetch("data/me_insights.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(I => { if (I && I.skills) renderInsights(I); });
 fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(hist => {
   const rec = (hist && hist.points || []).filter(p => p[1] >= 1 && p[2] > 0).sort((x, y) => x[1] - y[1]);
   if (rec.length < 2) return;

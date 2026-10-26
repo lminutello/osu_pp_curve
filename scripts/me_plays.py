@@ -11,11 +11,15 @@ Difficulty attributes are cached in the file, so after the first run only new to
 Reads OSU_CLIENT_ID / OSU_CLIENT_SECRET and OSU_USERNAME (default sakul333). ~1 request per second.
 Usage:  python scripts/me_plays.py
 """
-import json, os, sys, time, urllib.error, urllib.parse, urllib.request
-from datetime import datetime, timezone
+import gzip, json, os, random, sys, time, urllib.error, urllib.parse, urllib.request
+from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "data", "me_plays.json")
+LOG = os.path.join(ROOT, "data", "me_log.jsonl.gz")          # every play seen in a daily pull, kept forever
+PEERS = os.path.join(ROOT, "data", "me_peers.json")           # players near your pp, refreshed weekly
+HISTORY = os.path.join(ROOT, "data", "history.jsonl.gz")      # where peer candidates come from
+RATE_MODS = {"DT", "NC", "HT", "DC", "HR", "EZ", "FL"}
 API = "https://osu.ppy.sh/api/v2"
 
 
@@ -62,6 +66,49 @@ def play(s):
     }
 
 
+def attributes(api, cache, p):
+    """Difficulty attributes (aim, speed, star rating, max combo...) of a play's map with its rate/difficulty mods."""
+    key_mods = sorted(m for m in p["mods"] if m in RATE_MODS)
+    key = f"{p['map']}|{'+'.join(key_mods)}"
+    if key not in cache and p["map"]:
+        r = api.call(f"/beatmaps/{p['map']}/attributes", {"mods": key_mods, "ruleset": "osu"})
+        a = (r or {}).get("attributes") or {}
+        cache[key] = {k: a.get(k) for k in ("star_rating", "aim_difficulty", "speed_difficulty", "slider_factor",
+                                             "speed_note_count", "max_combo")}
+    return cache.get(key)
+
+
+def pull_peers(api, cache, my_pp, my_id, n_near=40, n_ahead=20, top=25):
+    """Top plays of ~40 players within 15% of your pp and ~20 a step ahead (1.3-1.8x), picked at random from the
+    history sample (current pp re-checked). Attributes for their top 25 plays (cached, so shared maps cost nothing)."""
+    with gzip.open(HISTORY, "rt") as f:
+        recs = [json.loads(l) for l in f if l.strip()]
+    rng = random.Random(int(time.time()) // 604800)
+    pick = lambda lo, hi, n: rng.sample([r["id"] for r in recs if r.get("pp") and lo <= r["pp"] <= hi and r["id"] != my_id],
+                                        min(n, sum(1 for r in recs if r.get("pp") and lo <= r["pp"] <= hi and r["id"] != my_id)))
+    groups = {"near": pick(my_pp * 0.8, my_pp * 1.25, int(n_near * 1.3)), "ahead": pick(my_pp * 1.3, my_pp * 1.8, int(n_ahead * 1.3))}
+    out = {"at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "myPP": my_pp, "players": []}
+    for group, ids in groups.items():
+        lo, hi = (0.85, 1.15) if group == "near" else (1.3, 1.8)
+        got = 0
+        for pid in ids:
+            if got >= (n_near if group == "near" else n_ahead): break
+            u = api.call(f"/users/{pid}/osu?key=id")
+            st = (u or {}).get("statistics") or {}
+            if not st.get("pp") or not lo <= st["pp"] / my_pp <= hi:
+                continue
+            best = [play(s) for s in api.call(f"/users/{pid}/scores/best?mode=osu&limit=50&legacy_only=0") or []]
+            for p in best[:top]:
+                p["attr"] = attributes(api, cache, p)
+            keep = ("pp", "acc", "fc", "miss", "mods", "at", "map", "title", "mapper", "stars", "length", "bpm", "ar", "od", "cs", "attr")
+            best = [{k: p.get(k) for k in keep} for p in best]
+            out["players"].append({"id": pid, "group": group, "pp": st.get("pp"), "hours": round((st.get("play_time") or 0) / 3600, 1),
+                                   "acc": st.get("hit_accuracy"), "plays": st.get("play_count"), "best": best})
+            got += 1
+        print(f"peers ({group}): {got}", flush=True)
+    return out
+
+
 def main():
     cid, secret = os.environ.get("OSU_CLIENT_ID"), os.environ.get("OSU_CLIENT_SECRET")
     user = os.environ.get("OSU_USERNAME") or "sakul333"
@@ -72,6 +119,7 @@ def main():
     if not u:
         sys.exit(f"Couldn't load player '{user}'.")
     uid = u["id"]
+    st = u.get("statistics") or {}
     old = {}
     if os.path.exists(OUT):
         with open(OUT) as f:
@@ -85,15 +133,31 @@ def main():
             for m in api.call(f"/users/{uid}/beatmapsets/most_played?limit=50") or []]
     # aim / speed difficulty of each top play with its mods (only rate- and difficulty-changing mods matter)
     for p in best:
-        key_mods = sorted(m for m in p["mods"] if m in {"DT", "NC", "HT", "DC", "HR", "EZ", "FL"})
-        key = f"{p['map']}|{'+'.join(key_mods)}"
-        if key not in cache and p["map"]:
-            r = api.call(f"/beatmaps/{p['map']}/attributes", {"mods": key_mods, "ruleset": "osu"})
-            a = (r or {}).get("attributes") or {}
-            cache[key] = {k: a.get(k) for k in ("star_rating", "aim_difficulty", "speed_difficulty", "slider_factor",
-                                                 "speed_note_count", "approach_rate", "overall_difficulty", "max_combo")}
-        p["attr"] = cache.get(key)
-    st = u.get("statistics") or {}
+        p["attr"] = attributes(api, cache, p)
+
+    # ---- the play log: recent plays only cover the last 24 hours, so keep every one we see
+    seen, log = set(), []
+    if os.path.exists(LOG):
+        with gzip.open(LOG, "rt") as f:
+            for line in f:
+                if line.strip():
+                    r = json.loads(line); log.append(r); seen.add((r.get("at"), r.get("map")))
+    new = [p for p in recent if (p["at"], p["map"]) not in seen]
+    with gzip.open(LOG, "at") as f:
+        for p in sorted(new, key=lambda p: p["at"] or ""):
+            f.write(json.dumps(p, separators=(",", ":")) + "\n")
+    print(f"play log: +{len(new)} plays ({len(log) + len(new)} total)")
+
+    # ---- peers: players near your pp (and a step ahead), from the history sample, refreshed weekly
+    peers = {}
+    if os.path.exists(PEERS):
+        with open(PEERS) as f:
+            peers = json.load(f)
+    fresh = peers.get("at") and datetime.now(timezone.utc) - datetime.fromisoformat(peers["at"].replace("Z", "+00:00")) < timedelta(days=7)
+    if not fresh and os.path.exists(HISTORY) and st.get("pp"):
+        peers = pull_peers(api, cache, st["pp"], uid)
+        with open(PEERS, "w") as f:
+            json.dump(peers, f, separators=(",", ":"))
     out = {"username": u.get("username"), "pulledAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "profile": {"pp": st.get("pp"), "hours": round((st.get("play_time") or 0) / 3600, 2), "plays": st.get("play_count"),
                        "acc": st.get("hit_accuracy"), "max_combo": st.get("maximum_combo"), "grades": st.get("grade_counts"),

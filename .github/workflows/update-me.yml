@@ -6,7 +6,9 @@ name: Update my stats
 # and does nothing if they aren't set. Change the player with a repository variable named OSU_USERNAME.
 # Also saves the player's top 100 plays, last day's plays and most played maps to data/me_plays.json (a few requests
 # a day; the first run looks up each top play's aim/speed difficulty, ~100 requests).
-# Estimated time: about 1 minute (about 3 minutes the first time).
+# Then logs every play from the last day, re-picks ~60 players near and just above your pp once a week (their top
+# plays), and computes the insights shown under the green progress tab (data/me_insights.json).
+# Estimated time: about 1 minute; about 10-15 minutes once a week when peers are re-pulled.
 on:
   schedule:
     - cron: "41 9 * * *"      # daily, 09:41 UTC
@@ -22,7 +24,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -41,10 +43,11 @@ jobs:
         run: |
           python scripts/update_me.py
           python scripts/me_plays.py || echo "couldn't save play details"
+          python scripts/me_insights.py || echo "couldn't compute insights"
 
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/me.json data/me_history.json data/me_plays.json 2>/dev/null || true
+          git add -A data/
           if git diff --cached --quiet; then echo "No changes."; else git commit -m "Update my stats ($(date -u +%Y-%m-%d))" && git pull --rebase -q origin main && git push; fi
