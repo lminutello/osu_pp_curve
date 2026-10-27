@@ -1295,7 +1295,7 @@ function renderInsights(I) {
   if (X) h += `<div><h4>Other signals</h4><div class="kv"><span><i>top plays set in the last 2 weeks</i> ${fmt(100 * X.momentum)}% <i>(peers ${fmt(100 * (X.peerMomentum ?? 0))}%)</i></span>
     <span><i>DT</i> ${fmt(100 * X.dtShare)}% <i>(peers ${fmt(100 * (X.peerDt ?? 0))}%)</i></span><span><i>HD</i> ${fmt(100 * X.hdShare)}% <i>(peers ${fmt(100 * (X.peerHd ?? 0))}%)</i></span>
     <span><i>top plays over 2 min</i> ${fmt(100 * X.longShare)}%</span></div></div>`;
-  h += `<div style="font-size:11.5px;color:var(--muted);font-weight:600">Updated after each daily pull (${I.at ? new Date(I.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}); peers re-picked weekly. Aim and speed are osu!'s own aim and speed difficulty of your top 25 maps (the two parts of star rating).</div>`;
+  h += `<div style="font-size:11.5px;color:var(--muted);font-weight:600">Updated after each daily pull (${I.at ? new Date(I.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}); peers re-picked weekly. Aim and speed are osu!'s own aim and speed difficulty (the two parts of star rating). Yours use all your top 100 plays weighted like osu! weights pp and accuracy (#1 counts fully, each next one 95% of the one before; map length is the weighted middle); peers' are the plain middle of their top 25 (top 50 for length, full combos and AR).</div>`;
   el.innerHTML = h; el.hidden = false;
   INS = I;
   renderSkills = () => {
@@ -1309,7 +1309,7 @@ function renderInsights(I) {
     const pr = now ? [I.peers.near, ...I.peers.ppRange] : snap ? snap.peers : null;
     let b = `<h4>Skill profile <small>${pr ? `vs ${pr[0]} players at ${fmt(pr[1])}–${fmt(pr[2])} pp · ` : ""}bar = your percentile among them</small></h4>`;
     if (!now) b += `<div class="skills-note">${na ? `No skill data this far back: tracking started ${pts.length ? `${day(pts[0].at)} (${fmt(pts[0].h)} h)` : "recently"}.`
-      : `As of ${day(snap.at)} · ${fmt(snap.h)} h · ${fmt(snap.pp)} pp`}</div>`;
+      : `As of ${day(snap.at)} · ${fmt(snap.h)} h · ${fmt(snap.pp)} pp${snap.m === 2 ? "" : " · older method (your top 25/50, unweighted)"}`}</div>`;
     for (const s of I.skills) {                     // one row per skill; "future" ones (reading) grayed out at the bottom
       const pct = val(s, 1), weak = weakKeys.includes(s.key), name = s.group || s.label;
       b += `<div class="grp ${s.future ? "future" : ""} ${na ? "na" : ""} ${weak ? "weakg" : ""}"><span>${name}${s.future ? "<small>matters more past ~4–5k pp</small>" : ""}</span><span class="bar"><i style="width:${pct ?? 0}%;background:${s.future ? "var(--muted)" : col(pct)}"></i></span><span class="num">${na ? "n/a" : pct == null ? "—" : ord(pct)}</span>

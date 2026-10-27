@@ -70,6 +70,43 @@ def profile(best, now):
     }
 
 
+def wmed(pairs):
+    """Weighted median of (value, weight) pairs."""
+    pairs = sorted((v, w) for v, w in pairs if v is not None)
+    half, acc = sum(w for _, w in pairs) / 2, 0.0
+    for v, w in pairs:
+        acc += w
+        if acc >= half:
+            return v
+    return None
+
+
+def profile_weighted(best, now):
+    """Your own profile, built the way osu! builds your pp and accuracy: all top 100 plays, play n weighted 0.95^n.
+    Difficulty and FC/AR shares are weighted averages; map length is a weighted median (a few 4-minute maps shouldn't
+    swing it). Mapper variety stays on the top 50 (it's a count, so weighting doesn't apply). Peers keep the plain
+    top-25/50 profile above."""
+    q = profile(best, now)
+    if not q:
+        return q
+    b = [p for p in best[:100] if p.get("map")]
+    w = [0.95 ** i for i in range(len(b))]
+    m = lambda p: set(p.get("mods") or [])
+    def wavg(f):
+        vals = [(f(p), wi) for p, wi in zip(b, w)]
+        vals = [(v, wi) for v, wi in vals if v is not None]
+        return sum(v * wi for v, wi in vals) / sum(wi for _, wi in vals) if vals else None
+    a = lambda k: (lambda p: (p.get("attr") or {}).get(k) if (p.get("attr") or {}).get("aim_difficulty") else None)
+    q.update({
+        "aim": wavg(a("aim_difficulty")), "speed": wavg(a("speed_difficulty")), "stars": wavg(a("star_rating")),
+        "speedAim": wavg(lambda p: p["attr"]["speed_difficulty"] / p["attr"]["aim_difficulty"] if (p.get("attr") or {}).get("aim_difficulty") else None),
+        "length": wmed([((p.get("length") or 0) / rate(m(p)), wi) for p, wi in zip(b, w)]),
+        "consistency": wavg(lambda p: 1.0 if (p.get("fc") or p.get("miss") == 0) else 0.0),
+        "reading": wavg(lambda p: 1.0 if (eff_ar(p.get("ar"), m(p)) or 0) >= 9.6 else 0.0),
+    })
+    return q
+
+
 AXES = [  # group, key, label, unit, which way is better, what a weak value means
     ("Aim", "aim", "Aim difficulty", "num", 1, "the jumps in your top plays are easier than peers'"),
     ("Speed", "speed", "Speed difficulty", "num", 1, "the tapping in your top plays is easier than peers'; streams and fast tapping are barely trained"),
@@ -170,6 +207,8 @@ def sessions(plays):
 
 
 SKILLS_HIST = D("me_skills_history.json")   # one skill snapshot per pull where play time changed, kept forever (tiny)
+# "m": 2 marks snapshots where your side is your top 100 weighted like osu! (from Oct 27, 2026); earlier ones used
+# the same plain top 25/50 as peers
 
 
 def record_skills(ins, hours, pp):
@@ -183,7 +222,7 @@ def record_skills(ins, hours, pp):
     if hist.get("user") != ins.get("user"):
         hist = {"user": ins.get("user"), "points": []}
     r = lambda v: None if v is None else round(v, 4)
-    snap = {"at": ins.get("at"), "h": round(hours, 3), "pp": round(pp or 0, 1),
+    snap = {"m": 2, "at": ins.get("at"), "h": round(hours, 3), "pp": round(pp or 0, 1),
             "peers": [ins["peers"]["near"], *ins["peers"]["ppRange"]], "weak": ins.get("weak", []),
             "s": {s["key"]: [r(s["you"]), s["pct"], r(s["peerMedian"]), r(s["peerP25"]), r(s["peerP75"])] for s in ins["skills"]}}
     pts = hist["points"]
@@ -210,7 +249,7 @@ def main():
         with open(D("me_peers.json")) as f:
             peers = json.load(f)
 
-    mine = profile(best, now)
+    mine = profile_weighted(best, now)                     # yours: top 100 weighted like osu!; peers: plain top 25/50
     near = []
     for p in peers.get("players", []):
         q = profile(p["best"], now) if p["group"] == "near" else None
