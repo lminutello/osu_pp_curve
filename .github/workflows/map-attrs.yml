@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       ids:
-        description: "Beatmap IDs, comma-separated"
+        description: "Beatmap IDs, comma-separated (s<id> for a whole set)"
         required: true
 
 permissions:

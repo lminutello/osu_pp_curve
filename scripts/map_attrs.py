@@ -2,7 +2,8 @@
 """
 Look up osu!'s difficulty numbers (aim, speed, star rating, max combo...) plus basic map info for a list of beatmap
 IDs, e.g. to sort a song library into collections. Writes library/map_attrs.json. ~2 requests per map.
-Usage:  MAP_IDS="123,456" python scripts/map_attrs.py
+A whole beatmap set can be given as s<set id> (its osu! standard difficulties are looked up).
+Usage:  MAP_IDS="123,456,s616023" python scripts/map_attrs.py
 """
 import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -12,8 +13,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
-    ids = [int(x) for x in (os.environ.get("MAP_IDS") or "").replace(" ", "").split(",") if x.strip().isdigit()]
+    raw = [x for x in (os.environ.get("MAP_IDS") or "").replace(" ", "").split(",") if x]
     api = Api(os.environ["OSU_CLIENT_ID"], os.environ["OSU_CLIENT_SECRET"])
+    ids = [int(x) for x in raw if x.isdigit()]
+    for x in raw:                                      # s<set id>: every osu! standard difficulty in that set
+        if x[:1] == "s" and x[1:].isdigit():
+            ids += [b["id"] for b in (api.call(f"/beatmapsets/{x[1:]}") or {}).get("beatmaps", []) if b.get("mode") == "osu"]
     out = {}
     for i in range(0, len(ids), 50):                   # map info in batches of 50
         q = "&".join(f"ids[]={x}" for x in ids[i:i + 50])
