@@ -222,6 +222,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .box-meta { grid-column: 1 / -1; color: var(--fg-2); font-size: 13px; font-weight: 700; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .box-meta i { font-style: normal; color: var(--muted); }
 .box-val { font: 900 18px/1.1 var(--f); color: #fff; text-align: right; font-variant-numeric: tabular-nums; min-width: 7ch; }
+#mine-val { min-width: 10.5em; white-space: nowrap; }   /* fixed width so the slider doesn't resize as the date text changes */
 .box-val small { display: block; font-size: 12px; color: var(--muted); font-weight: 800; }
 .box .hint { grid-column: 1 / -1; }
 /* click-to-expand explanations */
@@ -1219,6 +1220,14 @@ function mineAt(H) {                                   // pp at any play time al
   }
   return P_[P_.length - 1][1];
 }
+// rough date at a play time before recording started: straight lines (in play time) between the day the account was
+// made (0 h), each month start (hours assumed to grow with plays, from osu!'s plays per month) and the first dated record
+function mineDateAt(H) {
+  const A = MINE.dateAnchors; if (!A || A.length < 2) return null;
+  if (H <= A[0][0]) return A[0][1];
+  for (let i = 1; i < A.length; i++) if (H <= A[i][0]) { const t = (H - A[i - 1][0]) / (A[i][0] - A[i - 1][0]); return A[i - 1][1] + t * (A[i][1] - A[i - 1][1]); }
+  return A[A.length - 1][1];
+}
 const mineKind = H => { const P_ = MINE.path; let k = P_[0]; for (const p of P_) { if (p[0] <= H + 1e-9) k = p; } return k; };
 const mineH = () => { const P_ = MINE.path, a = Math.log(P_[0][0]), b = Math.log(P_[P_.length - 1][0]); return Math.exp(a + (b - a) * state.mineT); };
 function renderMine() {
@@ -1233,16 +1242,17 @@ function renderMine() {
   $("mine-rank-note").textContent = "on today's leaderboard";
   $("mine-meta").innerHTML = `<span><i>better than</i> <b style="color:#fff">${fmt(r.pct, 1)}%</b> <i>of players at ${dh(H)} today</i></span>` +
     `<span><i>std devs</i> ${r.z >= 0 ? "+" : "−"}${fmt(Math.abs(r.z), 2)}σ</span><span><i>typical pp</i> ${fmt(r.median)}</span>` +
-    (pace != null && pace > 0 ? `<span><i>your pace here</i> <b style="color:#fff">~${fmt(pace, 0)} pp/h</b></span>` : "") +
+    `<span><i>your pace here</i> ${pace != null && pace > 0 ? `<b style="color:#fff">~${fmt(pace, 0)} pp/h</b>` : "—"}</span>` +
     (real ? `<span><i>real players near the median</i> ~${fmt(real[2], 0)} pp/h</span>` : "") +
-    (k[2] === "rec" && k[4] && ACC ? `<span><i>accuracy</i> ${fmt(k[4], 2)}% <i>(better than ${fmt(accPct(k[1], k[4]), 0)}% at that pp)</i></span>` : "") +
+    (ACC ? `<span><i>accuracy</i> ${k[2] === "rec" && k[4] ? `${fmt(k[4], 2)}% <i>(better than ${fmt(accPct(k[1], k[4]), 0)}% at that pp)</i>` : "not recorded yet"}</span>` : "") +
     `<span style="color:var(--mine)">${src}${when}</span>`;
   // the date of the data at this point: a new point is recorded only on pulls where pp or play time changed, so days
   // without play add nothing; between two recordings it shows the span they cover
   const dated = MINE.path.filter(p => p[2] === "rec" && p[3]), dayOf = t => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   let dateTxt = "";
   if (dated.length) {
-    if (H < dated[0][0] - 0.01) dateTxt = `before ${dayOf(dated[0][3])}${k[2] === "rec" ? "" : " · " + (k[2] === "est" ? "estimated" : "rebuilt")}`;
+    if (H < dated[0][0] - 0.01) { const t = mineDateAt(H);           // before recording started: a rough date from your plays per month
+      dateTxt = t ? `~${dayOf(t)}${k[2] === "rec" ? "" : " · " + (k[2] === "est" ? "estimated" : "rebuilt")}` : `before ${dayOf(dated[0][3])}`; }
     else {
       let lo = dated[0], hi = null;
       for (const p of dated) { if (p[0] <= H + 0.01) lo = p; else { hi = p; break; } }
@@ -1350,6 +1360,17 @@ fetch("data/me_history.json", { cache: "no-cache" }).then(r => r.ok ? r.json() :
   for (let i = path.length - 1; i >= 0; i--) if (path[i][2] === "rec" || path[i][1] <= floorPP) { kept.unshift(path[i]); floorPP = Math.min(floorPP, path[i][1]); }
   path = kept;
   MINE = { user: hist.username, path };
+  const firstDated = rec.find(p => p[0]);
+  if (hist.joined && firstDated) {
+    const t0 = Date.parse(hist.joined), t1 = Date.parse(firstDated[0]), h1 = firstDated[1], hNow = rec[rec.length - 1][1];
+    const months = (hist.months || []).slice().sort(), total = months.reduce((a, m) => a + m[1], 0);
+    const A = [[0, t0]]; let cum = 0;
+    for (const [start, c] of months) {                 // month starts between joining and the first record
+      const t = Date.parse(start + "T00:00:00Z"), h = total ? hNow * cum / total : null; cum += c;
+      if (h != null && t > t0 && t < t1 && h > A[A.length - 1][0] && h < h1) A.push([h, t]);
+    }
+    A.push([h1, t1]); MINE.dateAnchors = A;
+  }
   $("mine-btn").querySelector("span").innerHTML = `${hist.username}'s <b>progress</b>`;
   $("mine-btn").hidden = false; renderMine();
 });

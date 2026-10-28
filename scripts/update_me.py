@@ -66,6 +66,9 @@ def main():
             hist = json.load(f)
     if hist.get("username") != me["username"]:            # a different player now: start their own history
         hist = {"username": me["username"], "points": [], "rebuilt": []}
+    # when the account was made and plays per month: lets the site put rough dates on the estimated past
+    hist["joined"] = u.get("join_date")
+    hist["months"] = [[m["start_date"], m["count"]] for m in u.get("monthly_playcounts") or []]
     last = hist["points"][-1] if hist["points"] else None
     if me["pp"] and me["hours"] and (not last or abs(last[1] - me["hours"]) > 1e-3 or abs(last[2] - me["pp"]) > 1e-2):
         hist["points"].append([now, me["hours"], me["pp"], me["rank"], me["acc"]])
