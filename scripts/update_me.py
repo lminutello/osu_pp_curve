@@ -57,6 +57,8 @@ def main():
         "hours": round((st.get("play_time") or 0) / 3600, 3),
         "rank": st.get("global_rank"),
         "acc": st.get("hit_accuracy"),
+        "countryRank": st.get("country_rank"),
+        "country": (u.get("country") or {}).get("name") or u.get("country_code"),
     }
 
     # ---- progress history

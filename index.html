@@ -590,6 +590,7 @@ function parseRank(raw) {
 
 // ---------- state
 const $ = id => document.getElementById(id);
+let MYSTATS = null;                                   // data/me.json (for the country rank)
 let MINE = null;                                      // "my progress" history, loaded below
 let INS = null, SKH = null, renderSkills = () => {};  // insights, skill snapshots over time, and the skill rows (follow the progress slider)
 const state = { acc: null, log: true, you: null, estH: 100, proj: false, trend: false, mine: false, mineT: 1, projExtra: 150, rank: null, Ncal: null };
@@ -880,8 +881,10 @@ function renderCompare() {
   const pct = r.pct, gr = grade(pct), g = gr[1], est = rankOf(pp);
   const above = 100 * (1 - shareAbove(pp).f);        // from your estimated rank, so the two always agree
   const warn = H > H1 ? "Beyond the sample, so this is extrapolated." : H > P.thin ? "Few players have this much play time, so treat these numbers as rough." : "";
+  const cr = MYSTATS && MYSTATS.countryRank && state.rank === MYSTATS.rank   // country rank: only known for your own profile
+    ? `<div class="note"><b style="color:#fff;font-size:15px">#${fmt(MYSTATS.countryRank)}</b> in ${MYSTATS.country || "your country"}</div>` : "";
   const rankTile = state.rank
-    ? stat("Global rank", `#${fmt(state.rank)}`, "yours, from your profile")
+    ? stat("Global rank", `#${fmt(state.rank)}`, "yours, from your profile").replace(/<\/div>$/, cr + "</div>")
     : stat("Global rank", est.text, "estimated from your pp");
   card.innerHTML = `
     <div class="eyebrow">Better than</div>
@@ -1378,6 +1381,7 @@ $("mine-slider").addEventListener("input", e => { state.mineT = +e.target.value 
 $("mine-reset").onclick = () => { state.mineT = 1; renderMine(); draw(); };
 fetch("data/me.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null).then(me => {
   if (me && me.pp && me.hours >= 1) {
+    MYSTATS = me;
     fillMe(me);                                       // open on the latest stats instead of a frozen example
     const when = me.updatedAt ? new Date(me.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
     const btn = $("me-btn");
