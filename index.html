@@ -194,6 +194,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); height: 28px; }
 .rmap .who small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 700; }
 .chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .chips i { font-style: normal; font-size: 11.5px; font-weight: 800; color: var(--fg-2); background: var(--bg-2); border-radius: 99px; padding: 2px 8px; }
+.chips i.coll { color: var(--cc); border: 1px solid var(--cc); background: transparent; }
 .chips i.hot { background: color-mix(in srgb, var(--rc) 22%, transparent); color: var(--rc); }
 .ins .card2 { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
 .ins .card2 b { color: #fff; }
@@ -1289,9 +1290,14 @@ function renderInsights(I) {
       h += `<div class="rmaps">` + (r.maps.length ? r.maps.map(m => {
         const t = m.title || "", k = t.lastIndexOf(" ["), song = k > 0 ? t.slice(0, k) : t, diff = k > 0 ? t.slice(k + 2, -1) : "";
         const chip = (key, txt) => `<i class="${hot === key ? "hot" : ""}">${txt}</i>`;
+        // which of your lazer collections it belongs in (same rules as the library sort: 2:00 splits short/long,
+        // speed/aim 0.70 short and 0.75/0.66 long split stream/aim, 1:00 splits aim short/medium)
+        const coll = m.speedAim == null ? "" : m.length < 120 ? (m.speedAim >= 0.70 ? "stream short" : m.length < 60 ? "aim short" : "aim medium")
+          : m.speedAim >= 0.75 ? "stream long" : m.speedAim < 0.66 ? "aim long" : "long other";
+        const cc = coll.startsWith("stream") ? "var(--blue)" : coll.startsWith("aim") ? "#ff9b6a" : "var(--purple)";
         return `<a class="rmap" href="https://osu.ppy.sh/b/${m.map}" target="_blank" rel="noopener"><span class="song">${esc(song)}</span>
           <span class="who">${m.peers}<small>similar<br>player${m.peers > 1 ? "s" : ""}</small></span><span class="diff">[${esc(diff)}]${m.mods.length ? " +" + m.mods.join("") : ""} · ${esc(m.mapper)}</span>
-          <span class="chips">${m.new === false && m.since ? `<i title="recommended earlier and still waiting for you">waiting since ${new Date(m.since + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</i>` : `<i class="hot">new</i>`}${chip("stars", "★" + m.stars)}${chip("length", mmss(m.length))}${chip("bpm", m.bpm + " BPM")}${chip("ar", "AR " + m.ar)}${hot === "mapper" ? chip("mapper", "new mapper") : ""}</span></a>`;
+          <span class="chips">${coll ? `<i class="coll" style="--cc:${cc}" title="the collection it fits in your library sort">${coll}</i>` : ""}${m.new === false && m.since ? `<i title="recommended earlier and still waiting for you">waiting since ${new Date(m.since + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</i>` : `<i class="hot">new</i>`}${chip("stars", "★" + m.stars)}${chip("length", mmss(m.length))}${chip("bpm", m.bpm + " BPM")}${chip("ar", "AR " + m.ar)}${hot === "mapper" ? chip("mapper", "new mapper") : ""}</span></a>`;
       }).join("") : `<div style="font-size:12.5px;color:var(--muted)">No fitting maps among peers' top plays yet; it fills in as more peers are pulled.</div>`) + `</div></div>`;
     }
     h += `</div></div>`;
