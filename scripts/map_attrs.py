@@ -25,7 +25,9 @@ def main():
         for b in (api.call(f"/beatmaps?{q}") or {}).get("beatmaps", []):
             out[b["id"]] = {"stars": b.get("difficulty_rating"), "length": b.get("hit_length"), "bpm": b.get("bpm"), "ar": b.get("ar"),
                             "od": b.get("accuracy"), "cs": b.get("cs"), "circles": b.get("count_circles"), "sliders": b.get("count_sliders"),
-                            "status": b.get("status"), "playcount": b.get("playcount"), "passcount": b.get("passcount"), "version": b.get("version")}
+                            "status": b.get("status"), "playcount": b.get("playcount"), "passcount": b.get("passcount"), "version": b.get("version"),
+                            "set": b.get("beatmapset_id"), "title": f"{(b.get('beatmapset') or {}).get('artist', '')} - {(b.get('beatmapset') or {}).get('title', '')}",
+                            "mapper": (b.get("beatmapset") or {}).get("creator")}
     for n, x in enumerate(ids, 1):
         a = ((api.call(f"/beatmaps/{x}/attributes", {"mods": [], "ruleset": "osu"}) or {}).get("attributes") or {})
         out.setdefault(x, {}).update({k: a.get(k) for k in ("star_rating", "aim_difficulty", "speed_difficulty", "slider_factor", "speed_note_count", "max_combo")})
