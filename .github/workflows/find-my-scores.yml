@@ -1,0 +1,30 @@
+name: Find my scores on a song (manual)
+
+# Searches the beatmap listing for a song and lists your submitted scores on every osu! standard version of it.
+# Prints to the run log and the run summary; saves nothing.
+# Estimated time: about 1 second per difficulty (usually under 2 minutes).
+on:
+  workflow_dispatch:
+    inputs:
+      search:
+        description: "Song to search for, e.g. freedom dive"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Find
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+          SEARCH: ${{ inputs.search }}
+        run: python scripts/find_my_scores.py
