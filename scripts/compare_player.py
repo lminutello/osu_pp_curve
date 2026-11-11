@@ -68,6 +68,18 @@ def main():
         f"playstyle {','.join(u.get('playstyle') or [])}, previous names {u.get('previous_usernames')}, restricted {u.get('is_restricted')}")
     say("  plays per month: " + " ".join(f"{m['start_date'][:7]}:{m['count']}" for m in u.get("monthly_playcounts") or []))
     say("  rank history (90 days, every 10th): " + str(((u.get("rank_history") or {}).get("data") or [])[::10]))
+    ach = sorted(a.get("achieved_at", "")[:10] for a in u.get("user_achievements") or [])
+    say(f"  medals: {len(ach)}, by day " + str(dict(sorted(__import__('collections').Counter(ach).items()))))
+    ev, off = [], 0
+    while off < 300:                                      # public activity feed: medal names, leaderboard ranks
+        page = api.call(f"/users/{u['id']}/recent_activity?limit=100&offset={off}") or []
+        ev += page; off += 100
+        if len(page) < 100: break
+    for e in sorted(ev, key=lambda e: e.get("created_at", "")):
+        what = (e.get("achievement") or {}).get("name") or (f"#{e.get('rank')} on {(e.get('beatmap') or {}).get('title')}" if e.get("rank") else "")
+        say(f"  event {e.get('created_at', '')[:10]} {e.get('type')} {what} {e.get('scoreRank') or ''}")
+    say("  most played: " + "; ".join(f"{(m.get('beatmapset') or {}).get('title')} [{(m.get('beatmap') or {}).get('version')}] {(m.get('beatmap') or {}).get('difficulty_rating')}* x{m.get('count')}"
+                                    for m in (api.call(f"/users/{u['id']}/beatmapsets/most_played?limit=15") or [])))
     dates = sorted((p.get("at") or "")[:10] for p in best)
     say(f"  top 50 dates: oldest {dates[0] if dates else '-'}, newest {dates[-1] if dates else '-'}; "
         f"by month {dict(sorted(__import__('collections').Counter(d[:7] for d in dates).items()))}")
