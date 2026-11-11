@@ -64,6 +64,15 @@ def main():
     fmt = {"num": "{:.2f}", "sec": "{:.0f}s", "pct": lambda v: f"{100 * v:.0f}%", "acc": "{:.2f}%", "stars": "{:.2f}★"}
     show = lambda unit, v: "—" if v is None else (fmt[unit](v) if callable(fmt[unit]) else fmt[unit].format(v))
     say(f"\n{u['username']}: {st.get('pp'):.0f} pp, {(st.get('play_time') or 0) / 3600:.0f} h, rank #{st.get('global_rank')}")
+    say(f"  joined {u.get('join_date', '')[:10]}, {st.get('play_count')} plays, acc {st.get('hit_accuracy')}, "
+        f"playstyle {','.join(u.get('playstyle') or [])}, previous names {u.get('previous_usernames')}, restricted {u.get('is_restricted')}")
+    say("  plays per month: " + " ".join(f"{m['start_date'][:7]}:{m['count']}" for m in u.get("monthly_playcounts") or []))
+    say("  rank history (90 days, every 10th): " + str(((u.get("rank_history") or {}).get("data") or [])[::10]))
+    dates = sorted((p.get("at") or "")[:10] for p in best)
+    say(f"  top 50 dates: oldest {dates[0] if dates else '-'}, newest {dates[-1] if dates else '-'}; "
+        f"by month {dict(sorted(__import__('collections').Counter(d[:7] for d in dates).items()))}")
+    for p in best[:8]:
+        say(f"  #{best.index(p) + 1} {p['title'][:55]} {p['stars']:.2f}* {p['pp']:.0f}pp {p['acc']}% {'FC' if p['fc'] else str(p['miss']) + 'x'} {'+'.join(p['mods']) or 'NM'} {(p.get('at') or '')[:10]}")
     say(f"{me['username']}: {me['profile']['pp']:.0f} pp, {me['profile']['hours']:.0f} h")
     say(f"(percentiles vs {len(near)} players near {f"{peer_pp:.0f}" if peer_pp else me['username'] + "'s"} pp)\n")
     say(f"{'skill':20}{u['username']:>22}{me['username']:>22}")
