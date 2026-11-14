@@ -132,7 +132,11 @@ REC_TYPES = {
     "accuracy": ("High-OD maps", lambda p, a, my: (p.get("od") or 0) >= 8.7),
     "variety": ("New mappers' styles", lambda p, a, my: p.get("mapper") not in my["mappers"]),
     "stars": ("A step harder", lambda p, a, my: True),
+    # always shown, by request: short jump maps (under 2:00, speed/aim under 0.70) at your usual-to-top level
+    "shortaim": ("Short aim maps", lambda p, a, my: (p.get("length") or 0) / rate(set(p.get("mods") or [])) < 120
+                 and a["speed_difficulty"] / a["aim_difficulty"] < 0.70),
 }
+SHORTAIM_WHY = "you asked for them: short jump maps under 2 minutes, from your usual level up to your best"
 
 
 STATE = D("me_recs_state.json")       # recommended maps waiting for you, so they stick around until you play them
@@ -151,7 +155,7 @@ def tried(m, my):
 
 def recs_for(key, me_prof, my, pool, used, keep=(), n=4, today="", fill=True):
     name, ok = REC_TYPES[key]
-    lo, hi = (my["stars_hi"], my["stars_hi"] + 0.45) if key == "stars" else (my["stars_lo"] * (0.9 if key in ("speed", "accuracy") else 1), my["stars_med"] * 1.05)
+    lo, hi = (my["stars_hi"], my["stars_hi"] + 0.45) if key == "stars" else (my["stars_med"] * 0.95, my["stars_hi"]) if key == "shortaim" else (my["stars_lo"] * (0.9 if key in ("speed", "accuracy") else 1), my["stars_med"] * 1.05)
     # maps recommended before stay first, unless played, too old, or now well out of range
     out = []
     for m in keep:
@@ -303,11 +307,11 @@ def main():
     today = now.strftime("%Y-%m-%d")
     # categories: today's weaknesses, plus any earlier card that still has maps waiting for you
     waiting = {k for k, ms in state.items() if not k.startswith("_") and any(not tried(m, my) for m in ms)}
-    rec_keys = [k for k in REC_ORDER if k in {s["key"] for s in weak} | waiting] or ["stars"]
-    why = {s["key"]: s["why"] for s in skills}
+    rec_keys = ([k for k in REC_ORDER if k in {s["key"] for s in weak} | waiting] or ["stars"]) + ["shortaim"]
+    why = {s["key"]: s["why"] for s in skills} | {"shortaim": SHORTAIM_WHY}
     weak_keys = {s["key"] for s in weak} or {"stars"}
     # a card that's no longer a weakness keeps the maps already waiting in it, but gets no new ones
-    recs = [dict(recs_for(k, mine, my, pool, used, keep=state.get(k, []), today=today, fill=k in weak_keys), why=why[k]) for k in rec_keys]
+    recs = [dict(recs_for(k, mine, my, pool, used, keep=state.get(k, []), today=today, fill=k in weak_keys | {"shortaim"}), why=why[k]) for k in rec_keys]
     recs = [r for r in recs if r["maps"] or r["key"] in {s["key"] for s in weak}]
     with open(STATE, "w") as f:
         json.dump({**{r["key"]: [{k: v for k, v in m.items() if k != "new"} for m in r["maps"]] for r in recs},

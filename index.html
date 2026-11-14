@@ -1280,9 +1280,9 @@ function renderInsights(I) {
   h += `<div id="mine-skills"></div>`;
   // weaknesses + what to play
   if (I.recs && I.recs.length) {
-    h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played · each stays until you play it (or ~2 months)</small></h4><div style="display:grid;gap:10px">`;
+    h += `<div><h4>What to play next <small>maps players at or just above your level have top plays on, that you haven't played · each stays until you play it (or ~3 weeks)</small></h4><div style="display:grid;gap:10px">`;
     const RC = { length: ["var(--purple)", "length"], speed: ["var(--blue)", "bpm"], variety: ["var(--gold)", "mapper"], stars: ["var(--pink)", "stars"],
-      aim: ["#ff9b6a", "stars"], consistency: ["var(--mine)", "len"], chokes: ["var(--mine)", "len"], accuracy: ["var(--mine)", "od"], reading: ["var(--blue)", "ar"] };
+      aim: ["#ff9b6a", "stars"], consistency: ["var(--mine)", "len"], chokes: ["var(--mine)", "len"], accuracy: ["var(--mine)", "od"], reading: ["var(--blue)", "ar"], shortaim: ["#ff9b6a", "length"] };
     for (const r of I.recs) {
       const sk = I.skills.find(s => s.key === r.key), [c, hot] = RC[r.key] || ["var(--mine)", ""];
       h += `<div class="rec" style="--rc:${c}"><div class="rec-h"><b>${esc(r.type)}</b><span>★${r.stars[0]}–${r.stars[1]}${sk ? ` · your ${esc(sk.label.toLowerCase())}: ${ord(sk.pct)} percentile` : ""}</span></div>`;
