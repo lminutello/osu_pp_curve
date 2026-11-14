@@ -136,8 +136,17 @@ REC_TYPES = {
 
 
 STATE = D("me_recs_state.json")       # recommended maps waiting for you, so they stick around until you play them
-KEEP_DAYS = 60                         # ...or until they've waited this long
+KEEP_DAYS = 21                         # ...or until they've waited this long
 KEEP_SLACK = 0.4                       # ...or until they're this many stars outside the category's current range
+
+
+song = lambda t: (t or "").rsplit(" [", 1)[0].strip().lower()   # "artist - title", any difficulty
+
+
+def tried(m, my):
+    """You've played this map, or any difficulty of the same song, or said you tried it (state "_tried")."""
+    return (m.get("map") in my["played"] or (m.get("set") and m["set"] in my["sets"]) or song(m.get("title")) in my["songs"]
+            or m.get("map") in my["skip"])
 
 
 def recs_for(key, me_prof, my, pool, used, keep=(), n=4, today="", fill=True):
@@ -147,14 +156,14 @@ def recs_for(key, me_prof, my, pool, used, keep=(), n=4, today="", fill=True):
     out = []
     for m in keep:
         age = (datetime.fromisoformat(today) - datetime.fromisoformat(m.get("since", today))).days if today else 0
-        if m["map"] in my["played"] or m["map"] in used or age > KEEP_DAYS or not lo - KEEP_SLACK <= m["stars"] <= hi + KEEP_SLACK:
+        if tried(m, my) or m["map"] in used or age > KEEP_DAYS or not lo - KEEP_SLACK <= m["stars"] <= hi + KEEP_SLACK:
             continue
         used.add(m["map"]); out.append(dict(m, new=False))
         if len(out) >= n: break
     cands = []
     for (mp, mods), c in pool.items():
         p, a = c["play"], c["play"]["attr"]
-        if mp in my["played"] or not a or not a.get("aim_difficulty") or not lo <= a["star_rating"] <= hi or not ok(p, a, my):
+        if tried(p, my) or not a or not a.get("aim_difficulty") or not lo <= a["star_rating"] <= hi or not ok(p, a, my):
             continue
         cands.append((len(c["who"]), c["ahead"], p.get("pp") or 0, p, a))
     cands.sort(key=lambda x: (-x[0], -x[1], -x[2]))
@@ -164,7 +173,7 @@ def recs_for(key, me_prof, my, pool, used, keep=(), n=4, today="", fill=True):
         if p["map"] in seen or p["map"] in used: continue
         seen.add(p["map"]); used.add(p["map"])
         r = rate(set(p.get("mods") or []))
-        out.append({"map": p["map"], "title": p.get("title"), "mapper": p.get("mapper"), "mods": [m for m in p.get("mods") or [] if m in ("DT", "NC", "HR", "HD", "EZ", "FL")],
+        out.append({"map": p["map"], "set": p.get("set"), "title": p.get("title"), "mapper": p.get("mapper"), "mods": [m for m in p.get("mods") or [] if m in ("DT", "NC", "HR", "HD", "EZ", "FL")],
                     "stars": round(a["star_rating"], 2), "length": round((p.get("length") or 0) / r), "bpm": round((p.get("bpm") or 0) * r),
                     "ar": round(eff_ar(p.get("ar"), set(p.get("mods") or [])) or 0, 1), "od": p.get("od"),
                     "speedAim": round(a["speed_difficulty"] / a["aim_difficulty"], 2), "peers": k, "since": today, "new": True})
@@ -281,16 +290,19 @@ def main():
     my_stars = sorted(p["attr"]["star_rating"] for p in best[:50] if p.get("attr") and p["attr"].get("star_rating"))
     played = {p["map"] for p in best} | {m["map"] for m in me.get("most_played", [])} | {p["map"] for p in log} | {p["map"] for p in me.get("recent", [])}
     my_aim = sorted(p["attr"]["aim_difficulty"] for p in best[:50] if p.get("attr") and p["attr"].get("aim_difficulty"))
-    my = {"aim_hi": my_aim[int(len(my_aim) * 0.75)], "played": played, "mappers": {p.get("mapper") for p in best[:50]},
+    mine_all = best + log + me.get("recent", []) + me.get("most_played", [])
+    my = {"aim_hi": my_aim[int(len(my_aim) * 0.75)], "played": played,
+          "sets": {p.get("set") for p in mine_all if p.get("set")}, "songs": {song(p.get("title")) for p in mine_all}, "mappers": {p.get("mapper") for p in best[:50]},
           "stars_lo": my_stars[len(my_stars) // 4], "stars_med": stats.median(my_stars), "stars_hi": my_stars[int(len(my_stars) * 0.9)]}
     used = set()                                         # each map is recommended once
     state = {}
     if os.path.exists(STATE):
         with open(STATE) as f:
             state = json.load(f)
+    my["skip"] = set(state.get("_tried", []))         # maps you said you tried that the log missed
     today = now.strftime("%Y-%m-%d")
     # categories: today's weaknesses, plus any earlier card that still has maps waiting for you
-    waiting = {k for k, ms in state.items() if any(m["map"] not in played for m in ms)}
+    waiting = {k for k, ms in state.items() if not k.startswith("_") and any(not tried(m, my) for m in ms)}
     rec_keys = [k for k in REC_ORDER if k in {s["key"] for s in weak} | waiting] or ["stars"]
     why = {s["key"]: s["why"] for s in skills}
     weak_keys = {s["key"] for s in weak} or {"stars"}
@@ -298,7 +310,8 @@ def main():
     recs = [dict(recs_for(k, mine, my, pool, used, keep=state.get(k, []), today=today, fill=k in weak_keys), why=why[k]) for k in rec_keys]
     recs = [r for r in recs if r["maps"] or r["key"] in {s["key"] for s in weak}]
     with open(STATE, "w") as f:
-        json.dump({r["key"]: [{k: v for k, v in m.items() if k != "new"} for m in r["maps"]] for r in recs}, f, separators=(",", ":"))
+        json.dump({**{r["key"]: [{k: v for k, v in m.items() if k != "new"} for m in r["maps"]] for r in recs},
+                   "_tried": sorted(my["skip"])}, f, separators=(",", ":"))
 
     # trend: hardest aim / speed among top plays set each week
     weeks = defaultdict(list)

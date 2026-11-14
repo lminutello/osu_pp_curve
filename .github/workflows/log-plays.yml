@@ -1,0 +1,39 @@
+name: Log my plays
+
+# osu! only keeps your last 24 hours of plays, so the once-a-day update could miss some (late runs, busy days).
+# Every 6 hours this appends any new plays to data/me_log.jsonl.gz, so recommendations you've tried get noticed.
+# 2-6 API requests a run. Estimated time: under 1 minute.
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: my-stats
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Log new plays
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+          OSU_USERNAME: ${{ vars.OSU_USERNAME }}
+          LOG_ONLY: "1"
+        run: python scripts/me_plays.py
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/me_log.jsonl.gz
+          if git diff --cached --quiet; then echo "No new plays."; else git commit -m "Log my plays ($(date -u +%Y-%m-%dT%H:%MZ))" && git pull --rebase -q origin main && git push; fi

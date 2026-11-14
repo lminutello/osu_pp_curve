@@ -9,6 +9,7 @@ Save the details of one player's plays to data/me_plays.json, for looking at how
 
 Difficulty attributes are cached in the file, so after the first run only new top plays cost a request.
 Reads OSU_CLIENT_ID / OSU_CLIENT_SECRET and OSU_USERNAME (default sakul333). ~1 request per second.
+With LOG_ONLY set, only appends the last day's plays to the play log (the 6-hourly "Log my plays" workflow).
 Usage:  python scripts/me_plays.py
 """
 import gzip, json, os, random, sys, time, urllib.error, urllib.parse, urllib.request
@@ -59,7 +60,7 @@ def play(s):
         "combo": s.get("max_combo"), "fc": bool(s.get("legacy_perfect") or s.get("is_perfect_combo")),
         "miss": st.get("miss", st.get("count_miss", 0)) or 0, "n100": st.get("ok", st.get("count_100", 0)) or 0,
         "n50": st.get("meh", st.get("count_50", 0)) or 0, "mods": mods_of(s), "at": s.get("ended_at") or s.get("created_at"),
-        "map": b.get("id"), "title": f"{bs.get('artist', '')} - {bs.get('title', '')} [{b.get('version', '')}]", "mapper": bs.get("creator"),
+        "map": b.get("id"), "set": bs.get("id"), "title": f"{bs.get('artist', '')} - {bs.get('title', '')} [{b.get('version', '')}]", "mapper": bs.get("creator"),
         "stars": b.get("difficulty_rating"), "length": b.get("hit_length") or b.get("total_length"), "bpm": b.get("bpm"),
         "ar": b.get("ar"), "od": b.get("accuracy"), "cs": b.get("cs"), "hp": b.get("drain"),
         "circles": b.get("count_circles"), "sliders": b.get("count_sliders"), "status": b.get("status"),
@@ -110,6 +111,21 @@ def pull_peers(api, cache, my_pp, my_id, n_near=40, n_ahead=20, top=25):
     return out
 
 
+def log_new(recent):
+    """The play log: the API only keeps the last 24 hours of plays, so keep every one we see."""
+    seen, n = set(), 0
+    if os.path.exists(LOG):
+        with gzip.open(LOG, "rt") as f:
+            for line in f:
+                if line.strip():
+                    r = json.loads(line); seen.add((r.get("at"), r.get("map"))); n += 1
+    new = [p for p in recent if (p["at"], p["map"]) not in seen]
+    with gzip.open(LOG, "at") as f:
+        for p in sorted(new, key=lambda p: p["at"] or ""):
+            f.write(json.dumps(p, separators=(",", ":")) + "\n")
+    print(f"play log: +{len(new)} plays ({n + len(new)} total)")
+
+
 def main():
     cid, secret = os.environ.get("OSU_CLIENT_ID"), os.environ.get("OSU_CLIENT_SECRET")
     user = os.environ.get("OSU_USERNAME") or "sakul333"
@@ -126,9 +142,15 @@ def main():
         with open(OUT) as f:
             old = json.load(f)
     cache = old.get("attrCache", {}) if old.get("username") == u.get("username") else {}
+    recent = []                                          # the API keeps 24 hours; page past 100 on busy days
+    for off in range(0, 500, 100):
+        page = api.call(f"/users/{uid}/scores/recent?mode=osu&limit=100&offset={off}&include_fails=1&legacy_only=0") or []
+        recent += [play(s) for s in page]
+        if len(page) < 100: break
+    if os.environ.get("LOG_ONLY"):                       # the 6-hourly play logger: just append new plays and stop
+        log_new(recent); return
     best = [play(s) for s in api.call(f"/users/{uid}/scores/best?mode=osu&limit=100&legacy_only=0") or []]
-    recent = [play(s) for s in api.call(f"/users/{uid}/scores/recent?mode=osu&limit=100&include_fails=1&legacy_only=0") or []]
-    most = [{"map": (m.get("beatmap") or {}).get("id"), "count": m.get("count"),
+    most = [{"map": (m.get("beatmap") or {}).get("id"), "set": (m.get("beatmapset") or {}).get("id"), "count": m.get("count"),
              "title": f"{(m.get('beatmapset') or {}).get('artist', '')} - {(m.get('beatmapset') or {}).get('title', '')} [{(m.get('beatmap') or {}).get('version', '')}]",
              "stars": (m.get("beatmap") or {}).get("difficulty_rating"), "length": (m.get("beatmap") or {}).get("hit_length")}
             for m in api.call(f"/users/{uid}/beatmapsets/most_played?limit=50") or []]
@@ -136,18 +158,7 @@ def main():
     for p in best:
         p["attr"] = attributes(api, cache, p)
 
-    # ---- the play log: recent plays only cover the last 24 hours, so keep every one we see
-    seen, log = set(), []
-    if os.path.exists(LOG):
-        with gzip.open(LOG, "rt") as f:
-            for line in f:
-                if line.strip():
-                    r = json.loads(line); log.append(r); seen.add((r.get("at"), r.get("map")))
-    new = [p for p in recent if (p["at"], p["map"]) not in seen]
-    with gzip.open(LOG, "at") as f:
-        for p in sorted(new, key=lambda p: p["at"] or ""):
-            f.write(json.dumps(p, separators=(",", ":")) + "\n")
-    print(f"play log: +{len(new)} plays ({len(log) + len(new)} total)")
+    log_new(recent)
 
     # ---- peers: players near your pp (and a step ahead), from the history sample, refreshed weekly
     peers = {}
