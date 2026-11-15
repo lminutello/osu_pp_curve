@@ -1,0 +1,25 @@
+name: Check the osu! API (manual)
+
+# Gets a token and tries a few API endpoints, printing each status. Use it when "Update my stats" fails.
+# Saves nothing. Estimated time: under 1 minute.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+          OSU_USERNAME: ${{ vars.OSU_USERNAME }}
+        run: python scripts/api_check.py
