@@ -17,4 +17,11 @@ for path, ua in [(f"/users/@{user}/osu", None), (f"/users/{user}/osu?key=usernam
         r = urllib.request.urlopen(urllib.request.Request("https://osu.ppy.sh/api/v2" + path, headers=h), timeout=30)
         d = json.load(r); print(f"{r.status} {path} ua={ua or 'default'} -> {d.get('username') or d.get('version') or list(d)[:3]}")
     except urllib.error.HTTPError as e:
-        print(f"{e.code} {path} ua={ua or 'default'} -> {e.read()[:300]!r}")
+        b = e.read().decode("utf-8", "replace"); import re
+        code = re.search(r"Error (?:code:?\s*)?(\d{4})", b); ray = re.search(r"Ray ID: <strong[^>]*>([0-9a-f]+)", b)
+        print(f"{e.code} {path} ua={ua or 'default'} -> cloudflare error {code.group(1) if code else '?'} ray {ray.group(1) if ray else '?'}")
+
+import subprocess                                       # same request through curl (different TLS fingerprint)
+r = subprocess.run(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Authorization: Bearer {tok['access_token']}",
+                    "-H", "Accept: application/json", f"https://osu.ppy.sh/api/v2/users/@{user}/osu"], capture_output=True, text=True)
+print("curl /users:", r.stdout)
